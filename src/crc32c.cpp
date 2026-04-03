@@ -2,7 +2,16 @@
 
 #include <array>
 #include <cstring> // std::memcpy
-#include <nmmintrin.h> // crc32 intrinsics
+
+#include "checksum/detail/arch.hpp"
+
+#if CKS_ARCH_X86
+#include <nmmintrin.h>
+#endif
+
+#if CKS_ARCH_ARM
+#include <arm_acle.h>
+#endif
 
 #include "checksum/detail/cpu.hpp"
 
