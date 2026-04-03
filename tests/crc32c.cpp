@@ -167,8 +167,8 @@ TEST(CRC32C, LargeBufferStress)
 #endif
 }
 
-// 6. 工业标准验证 (iSCSI 123456789)
-TEST(CRC32C, IndustryStandard)
+// 6. 已知值测试
+TEST(CRC32C, standard)
 {
     const char* input = "123456789";
     const uint32_t rfc_expected = 0xE3069283;
@@ -186,6 +186,51 @@ TEST(CRC32C, IndustryStandard)
 #if CKS_ARCH_ARM
     // 验证 ARM 是否一致
     uint32_t arm_res = crc32c_end(detail::crc32c_update_arm(crc32c_begin(), input, 9));
+    EXPECT_EQ(arm_res, soft_res);
+#endif
+}
+
+TEST(CRC32C, standard_2)
+{
+    // https://www.lddgo.net/encrypt/crc 在线计算
+    const char* input = "6516861AVSDV";
+    const uint32_t rfc_expected = 0xD3936279;
+
+    // 首先验证 Soft 实现是否符合标准
+    uint32_t soft_res = crc32c_end(detail::crc32c_update_soft(crc32c_begin(), input, 12));
+    EXPECT_EQ(soft_res, rfc_expected);
+
+#if CKS_ARCH_X86
+    // 验证 SSE4.2 是否与符合标准的 Soft 版本一致
+    uint32_t sse_res = crc32c_end(detail::crc32c_update_sse42(crc32c_begin(), input, 12));
+    EXPECT_EQ(sse_res, soft_res);
+#endif
+
+#if CKS_ARCH_ARM
+    // 验证 ARM 是否一致
+    uint32_t arm_res = crc32c_end(detail::crc32c_update_arm(crc32c_begin(), input, 12));
+    EXPECT_EQ(arm_res, soft_res);
+#endif
+}
+
+TEST(CRC32C, standard_3)
+{
+    const char* input = "aoscjnfsoidjc";
+    const uint32_t rfc_expected = 0xB92A3D05;
+
+    // 首先验证 Soft 实现是否符合标准
+    uint32_t soft_res = crc32c_end(detail::crc32c_update_soft(crc32c_begin(), input, 13));
+    EXPECT_EQ(soft_res, rfc_expected);
+
+#if CKS_ARCH_X86
+    // 验证 SSE4.2 是否与符合标准的 Soft 版本一致
+    uint32_t sse_res = crc32c_end(detail::crc32c_update_sse42(crc32c_begin(), input, 13));
+    EXPECT_EQ(sse_res, soft_res);
+#endif
+
+#if CKS_ARCH_ARM
+    // 验证 ARM 是否一致
+    uint32_t arm_res = crc32c_end(detail::crc32c_update_arm(crc32c_begin(), input, 13));
     EXPECT_EQ(arm_res, soft_res);
 #endif
 }
