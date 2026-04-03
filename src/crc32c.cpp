@@ -135,7 +135,7 @@ namespace cks
                 #endif
 
                 #if CKS_ARCH_ARM
-                if (info.crc32)
+                if (info.arm_crc32)
                 {
                     return detail::crc32c_update_arm;
                 }
