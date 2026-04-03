@@ -87,6 +87,7 @@ namespace cks
         #endif
 
         #if CKS_ARCH_ARM
+        CKS_FUNC_ATTR_INTRINSICS_ARM_CRC32
         CRC32C CKS_CALL_CONV crc32c_update_arm(CRC32C crc, const void* data, size_t size) noexcept
         {
             const uint8_t* bytes = reinterpret_cast<const uint8_t*>(data);
