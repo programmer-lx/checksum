@@ -116,91 +116,89 @@ namespace cks
         }
     }
 
-    MD5_Context CKS_CALL_CONV md5_update(MD5_Context ctx, const void* data, size_t len) noexcept
+    void CKS_CALL_CONV md5_update(MD5_Context* ctx, const void* data, size_t len) noexcept
     {
         if (!data || len == 0)
-                return ctx;
+            return;
 
-            const uint8_t* bytes = static_cast<const uint8_t*>(data);
+        const uint8_t* bytes = static_cast<const uint8_t*>(data);
 
-            // 更新总消息长度
-            ctx.bit_len += static_cast<uint64_t>(len) * 8;
+        // 更新总消息长度
+        ctx->bit_len += static_cast<uint64_t>(len) * 8;
 
-            // 如果缓冲区有数据，尝试填满64字节块
-            if (ctx.buffer_len > 0)
+        // 如果缓冲区有数据，尝试填满64字节块
+        if (ctx->buffer_len > 0)
+        {
+            size_t needed = 64 - ctx->buffer_len;
+            size_t copy_len = (len < needed) ? len : needed;
+
+            std::memcpy(ctx->buffer + ctx->buffer_len, bytes, copy_len);
+            ctx->buffer_len += static_cast<uint32_t>(copy_len);
+            bytes += copy_len;
+            len -= copy_len;
+
+            // 如果缓冲区满了，处理它
+            if (ctx->buffer_len == 64)
             {
-                size_t needed = 64 - ctx.buffer_len;
-                size_t copy_len = (len < needed) ? len : needed;
-
-                std::memcpy(ctx.buffer + ctx.buffer_len, bytes, copy_len);
-                ctx.buffer_len += static_cast<uint32_t>(copy_len);
-                bytes += copy_len;
-                len -= copy_len;
-
-                // 如果缓冲区满了，处理它
-                if (ctx.buffer_len == 64)
-                {
-                    detail::md5_transform(ctx.state, ctx.buffer);
-                    ctx.buffer_len = 0;
-                }
+                detail::md5_transform(ctx->state, ctx->buffer);
+                ctx->buffer_len = 0;
             }
+        }
 
-            // 处理完整的64字节块
-            while (len >= 64)
-            {
-                detail::md5_transform(ctx.state, bytes);
-                bytes += 64;
-                len -= 64;
-            }
+        // 处理完整的64字节块
+        while (len >= 64)
+        {
+            detail::md5_transform(ctx->state, bytes);
+            bytes += 64;
+            len -= 64;
+        }
 
-            // 保存剩余数据到缓冲区
-            if (len > 0)
-            {
-                std::memcpy(ctx.buffer, bytes, len);
-                ctx.buffer_len = static_cast<uint32_t>(len);
-            }
-
-            return ctx;
+        // 保存剩余数据到缓冲区
+        if (len > 0)
+        {
+            std::memcpy(ctx->buffer, bytes, len);
+            ctx->buffer_len = static_cast<uint32_t>(len);
+        }
     }
 
-    MD5 CKS_CALL_CONV md5_end(MD5_Context ctx) noexcept
+    MD5 CKS_CALL_CONV md5_end(MD5_Context* ctx) noexcept
     {
         // 1. 添加0x80标记
-        ctx.buffer[ctx.buffer_len++] = 0x80;
+        ctx->buffer[ctx->buffer_len++] = 0x80;
 
         // 2. 如果剩余空间不足8字节，先填充0x00并处理
-        if (ctx.buffer_len > 56)
+        if (ctx->buffer_len > 56)
         {
-            std::memset(ctx.buffer + ctx.buffer_len, 0, 64 - ctx.buffer_len);
-            detail::md5_transform(ctx.state, ctx.buffer);
-            ctx.buffer_len = 0;
+            std::memset(ctx->buffer + ctx->buffer_len, 0, 64 - ctx->buffer_len);
+            detail::md5_transform(ctx->state, ctx->buffer);
+            ctx->buffer_len = 0;
         }
 
         // 3. 填充0x00到位置56
-        std::memset(ctx.buffer + ctx.buffer_len, 0, 56 - ctx.buffer_len);
+        std::memset(ctx->buffer + ctx->buffer_len, 0, 56 - ctx->buffer_len);
 
         // 4. 追加原始消息长度（64位小端序）- MD5使用小端序
-        uint64_t bit_len = ctx.bit_len;
-        ctx.buffer[56] = static_cast<uint8_t>(bit_len & 0xFF);
-        ctx.buffer[57] = static_cast<uint8_t>((bit_len >> 8) & 0xFF);
-        ctx.buffer[58] = static_cast<uint8_t>((bit_len >> 16) & 0xFF);
-        ctx.buffer[59] = static_cast<uint8_t>((bit_len >> 24) & 0xFF);
-        ctx.buffer[60] = static_cast<uint8_t>((bit_len >> 32) & 0xFF);
-        ctx.buffer[61] = static_cast<uint8_t>((bit_len >> 40) & 0xFF);
-        ctx.buffer[62] = static_cast<uint8_t>((bit_len >> 48) & 0xFF);
-        ctx.buffer[63] = static_cast<uint8_t>((bit_len >> 56) & 0xFF);
+        uint64_t bit_len = ctx->bit_len;
+        ctx->buffer[56] = static_cast<uint8_t>(bit_len & 0xFF);
+        ctx->buffer[57] = static_cast<uint8_t>((bit_len >> 8) & 0xFF);
+        ctx->buffer[58] = static_cast<uint8_t>((bit_len >> 16) & 0xFF);
+        ctx->buffer[59] = static_cast<uint8_t>((bit_len >> 24) & 0xFF);
+        ctx->buffer[60] = static_cast<uint8_t>((bit_len >> 32) & 0xFF);
+        ctx->buffer[61] = static_cast<uint8_t>((bit_len >> 40) & 0xFF);
+        ctx->buffer[62] = static_cast<uint8_t>((bit_len >> 48) & 0xFF);
+        ctx->buffer[63] = static_cast<uint8_t>((bit_len >> 56) & 0xFF);
 
         // 5. 处理最后一块
-        detail::md5_transform(ctx.state, ctx.buffer);
+        detail::md5_transform(ctx->state, ctx->buffer);
 
         // 6. 将state[4]转换为16字节小端序数组 - MD5输出是小端序
         MD5 hash;
         for (int i = 0; i < 4; ++i)
         {
-            hash.bytes[i * 4 + 0] = static_cast<uint8_t>(ctx.state[i] & 0xFF);
-            hash.bytes[i * 4 + 1] = static_cast<uint8_t>((ctx.state[i] >> 8) & 0xFF);
-            hash.bytes[i * 4 + 2] = static_cast<uint8_t>((ctx.state[i] >> 16) & 0xFF);
-            hash.bytes[i * 4 + 3] = static_cast<uint8_t>((ctx.state[i] >> 24) & 0xFF);
+            hash.bytes[i * 4 + 0] = static_cast<uint8_t>(ctx->state[i] & 0xFF);
+            hash.bytes[i * 4 + 1] = static_cast<uint8_t>((ctx->state[i] >> 8) & 0xFF);
+            hash.bytes[i * 4 + 2] = static_cast<uint8_t>((ctx->state[i] >> 16) & 0xFF);
+            hash.bytes[i * 4 + 3] = static_cast<uint8_t>((ctx->state[i] >> 24) & 0xFF);
         }
 
         return hash;

@@ -41,8 +41,8 @@ TEST(MD5, Standard)
     for (const auto& vec : test_vectors)
     {
         MD5_Context ctx = md5_begin();
-        ctx = md5_update(ctx, vec.first.data(), vec.first.size());
-        MD5 result = md5_end(ctx);
+        md5_update(&ctx, vec.first.data(), vec.first.size());
+        MD5 result = md5_end(&ctx);
 
         EXPECT_EQ(to_hex(result), vec.second);
     }
@@ -60,8 +60,8 @@ TEST(MD5, SegmentConsistency)
 
     // 一次性计算
     MD5_Context soft_ctx = md5_begin();
-    soft_ctx = md5_update(soft_ctx, data.data(), data.size());
-    MD5 soft_full = md5_end(soft_ctx);
+    md5_update(&soft_ctx, data.data(), data.size());
+    MD5 soft_full = md5_end(&soft_ctx);
 
     // 分段计算
     {
@@ -70,10 +70,10 @@ TEST(MD5, SegmentConsistency)
         while (pos < data.size())
         {
             size_t chunk = (pos + 100 <= data.size()) ? 100 : (data.size() - pos);
-            ctx = md5_update(ctx, data.data() + pos, chunk);
+            md5_update(&ctx, data.data() + pos, chunk);
             pos += chunk;
         }
-        MD5 result = md5_end(ctx);
+        MD5 result = md5_end(&ctx);
         EXPECT_EQ(result, soft_full);
     }
 }

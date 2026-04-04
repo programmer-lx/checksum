@@ -1,5 +1,7 @@
 #include "checksum/sha256.hpp"
 
+#include <cstring> // std::memcpy
+
 #include "checksum/detail/arch.hpp"
 #include "checksum/detail/cpu.hpp"
 
@@ -67,11 +69,11 @@ namespace cks
 
             for (int i = 0; i < 64; ++i)
             {
-                uint32_t S1  = rotr32(e, 6) ^ rotr32(e, 11) ^ rotr32(e, 25);
-                uint32_t ch  = (e & f) ^ (~e & g);
+                uint32_t S1   = rotr32(e, 6) ^ rotr32(e, 11) ^ rotr32(e, 25);
+                uint32_t ch   = (e & f) ^ (~e & g);
                 uint32_t tmp1 = h + S1 + ch + K[i] + W[i];
-                uint32_t S0  = rotr32(a, 2) ^ rotr32(a, 13) ^ rotr32(a, 22);
-                uint32_t maj = (a & b) ^ (a & c) ^ (b & c);
+                uint32_t S0   = rotr32(a, 2) ^ rotr32(a, 13) ^ rotr32(a, 22);
+                uint32_t maj  = (a & b) ^ (a & c) ^ (b & c);
                 uint32_t tmp2 = S0 + maj;
 
                 h = g; g = f; f = e; e = d + tmp1;
@@ -82,67 +84,64 @@ namespace cks
             state[4] += e; state[5] += f; state[6] += g; state[7] += h;
         }
 
-        SHA256_Context CKS_CALL_CONV sha256_update_soft(SHA256_Context ctx, const void* data, size_t len) noexcept
+        void CKS_CALL_CONV sha256_update_soft(SHA256_Context* ctx, const void* data, size_t len) noexcept
         {
             const uint8_t* bytes = reinterpret_cast<const uint8_t*>(data);
 
             while (len > 0)
             {
-                uint32_t space = 64 - ctx.buffer_len;
+                uint32_t space = 64 - ctx->buffer_len;
                 uint32_t copy  = (len < space) ? uint32_t(len) : space;
 
-                std::memcpy(ctx.buffer + ctx.buffer_len, bytes, copy);
-                ctx.buffer_len += copy;
-                ctx.bit_len    += uint64_t(copy) * 8;
-                bytes          += copy;
-                len            -= copy;
+                std::memcpy(ctx->buffer + ctx->buffer_len, bytes, copy);
+                ctx->buffer_len += copy;
+                ctx->bit_len    += uint64_t(copy) * 8;
+                bytes           += copy;
+                len             -= copy;
 
-                if (ctx.buffer_len == 64)
+                if (ctx->buffer_len == 64)
                 {
-                    sha256_process_block_soft(ctx.state, ctx.buffer);
-                    ctx.buffer_len = 0;
+                    sha256_process_block_soft(ctx->state, ctx->buffer);
+                    ctx->buffer_len = 0;
                 }
             }
-
-            return ctx;
         }
 
-        SHA256 CKS_CALL_CONV sha256_end_soft(SHA256_Context ctx) noexcept
+        SHA256 CKS_CALL_CONV sha256_end_soft(SHA256_Context* ctx) noexcept
         {
-            // 填充：追加 0x80，然后是零字节，最后是 64 位大端长度
-            uint32_t i = ctx.buffer_len;
-            ctx.buffer[i++] = 0x80;
+            uint32_t i = ctx->buffer_len;
+            ctx->buffer[i++] = 0x80;
 
             if (i > 56)
             {
                 while (i < 64)
-                    ctx.buffer[i++] = 0x00;
-                sha256_process_block_soft(ctx.state, ctx.buffer);
+                    ctx->buffer[i++] = 0x00;
+                sha256_process_block_soft(ctx->state, ctx->buffer);
                 i = 0;
             }
 
             while (i < 56)
-                ctx.buffer[i++] = 0x00;
+                ctx->buffer[i++] = 0x00;
 
             // 大端序写入比特长度
-            ctx.buffer[56] = uint8_t(ctx.bit_len >> 56);
-            ctx.buffer[57] = uint8_t(ctx.bit_len >> 48);
-            ctx.buffer[58] = uint8_t(ctx.bit_len >> 40);
-            ctx.buffer[59] = uint8_t(ctx.bit_len >> 32);
-            ctx.buffer[60] = uint8_t(ctx.bit_len >> 24);
-            ctx.buffer[61] = uint8_t(ctx.bit_len >> 16);
-            ctx.buffer[62] = uint8_t(ctx.bit_len >>  8);
-            ctx.buffer[63] = uint8_t(ctx.bit_len >>  0);
+            ctx->buffer[56] = uint8_t(ctx->bit_len >> 56);
+            ctx->buffer[57] = uint8_t(ctx->bit_len >> 48);
+            ctx->buffer[58] = uint8_t(ctx->bit_len >> 40);
+            ctx->buffer[59] = uint8_t(ctx->bit_len >> 32);
+            ctx->buffer[60] = uint8_t(ctx->bit_len >> 24);
+            ctx->buffer[61] = uint8_t(ctx->bit_len >> 16);
+            ctx->buffer[62] = uint8_t(ctx->bit_len >>  8);
+            ctx->buffer[63] = uint8_t(ctx->bit_len >>  0);
 
-            sha256_process_block_soft(ctx.state, ctx.buffer);
+            sha256_process_block_soft(ctx->state, ctx->buffer);
 
             SHA256 result;
             for (int j = 0; j < 8; ++j)
             {
-                result.bytes[j * 4 + 0] = uint8_t(ctx.state[j] >> 24);
-                result.bytes[j * 4 + 1] = uint8_t(ctx.state[j] >> 16);
-                result.bytes[j * 4 + 2] = uint8_t(ctx.state[j] >>  8);
-                result.bytes[j * 4 + 3] = uint8_t(ctx.state[j] >>  0);
+                result.bytes[j * 4 + 0] = uint8_t(ctx->state[j] >> 24);
+                result.bytes[j * 4 + 1] = uint8_t(ctx->state[j] >> 16);
+                result.bytes[j * 4 + 2] = uint8_t(ctx->state[j] >>  8);
+                result.bytes[j * 4 + 3] = uint8_t(ctx->state[j] >>  0);
             }
             return result;
         }
@@ -156,26 +155,22 @@ namespace cks
         static void sha256_process_block_sha(uint32_t state[8], const uint8_t block[64]) noexcept
         {
             // 加载当前状态
-            // state[0..7] = a,b,c,d,e,f,g,h
             // SHA-NI 使用两个寄存器: ABEF 和 CDGH
             __m128i state0 = _mm_loadu_si128(reinterpret_cast<const __m128i*>(&state[0])); // a,b,c,d
             __m128i state1 = _mm_loadu_si128(reinterpret_cast<const __m128i*>(&state[4])); // e,f,g,h
 
-            // SHA-NI 需要: state0 = {e,f,a,b}（高到低 dword），state1 = {g,h,c,d}
-            // 原始加载是小端序的内存布局，整理成正确的寄存器格式
+            // 整理成 SHA-NI 要求的寄存器格式
             __m128i tmp    = _mm_shuffle_epi32(state0, 0xB1); // cd ab
-            state1         = _mm_shuffle_epi32(state1, 0x1B); // ef gh -> gh ef
+            state1         = _mm_shuffle_epi32(state1, 0x1B); // gh ef
             state0         = _mm_alignr_epi8(tmp, state1, 8); // ab ef
             state1         = _mm_blend_epi16(state1, tmp, 0xF0); // gh cd
 
             __m128i abef_save = state0;
             __m128i cdgh_save = state1;
 
-            // 加载常量
-            const __m128i* K128 = reinterpret_cast<const __m128i*>(K);
-
             // 加载并转换消息块（大端序）
-            const __m128i MASK = _mm_set_epi64x(0x0c0d0e0f08090a0bULL, 0x0405060700010203ULL);
+            const __m128i* K128 = reinterpret_cast<const __m128i*>(K);
+            const __m128i MASK  = _mm_set_epi64x(0x0c0d0e0f08090a0bULL, 0x0405060700010203ULL);
 
             __m128i msg0 = _mm_shuffle_epi8(_mm_loadu_si128(reinterpret_cast<const __m128i*>(block +  0)), MASK);
             __m128i msg1 = _mm_shuffle_epi8(_mm_loadu_si128(reinterpret_cast<const __m128i*>(block + 16)), MASK);
@@ -333,79 +328,74 @@ namespace cks
             state1 = _mm_add_epi32(state1, cdgh_save);
 
             // 还原为 state[0..7] 排列
-            tmp0   = _mm_shuffle_epi32(state0, 0x1B); // fe ba
-            state1 = _mm_shuffle_epi32(state1, 0xB1); // dg hc -> hc dg? no: cdgh -> ghcd
-            // state0 after round: {e,f,a,b} -> shuffle 1B -> {b,a,f,e}
-            // state1 after round: {g,h,c,d} -> shuffle B1 -> {d,c,h,g}? let me recheck
-            // Actually reconstruct: abef and cdgh
-            state0 = _mm_blend_epi16(tmp0, state1, 0xF0); // {d,c,b,a}? need {a,b,c,d}
-            state1 = _mm_alignr_epi8(state1, tmp0, 8);    // {e,f,g,h}? need {e,f,g,h}
+            tmp0   = _mm_shuffle_epi32(state0, 0x1B);
+            state1 = _mm_shuffle_epi32(state1, 0xB1);
+            state0 = _mm_blend_epi16(tmp0, state1, 0xF0);
+            state1 = _mm_alignr_epi8(state1, tmp0, 8);
 
             _mm_storeu_si128(reinterpret_cast<__m128i*>(&state[0]), state0);
             _mm_storeu_si128(reinterpret_cast<__m128i*>(&state[4]), state1);
         }
 
         CKS_FUNC_ATTR_INTRINSICS_SHA256
-        SHA256_Context CKS_CALL_CONV sha256_update_sha(SHA256_Context ctx, const void* data, size_t len) noexcept
+        void CKS_CALL_CONV sha256_update_sha(SHA256_Context* ctx, const void* data, size_t len) noexcept
         {
             const uint8_t* bytes = reinterpret_cast<const uint8_t*>(data);
 
             while (len > 0)
             {
-                uint32_t space = 64 - ctx.buffer_len;
+                uint32_t space = 64 - ctx->buffer_len;
                 uint32_t copy  = (len < space) ? uint32_t(len) : space;
 
-                std::memcpy(ctx.buffer + ctx.buffer_len, bytes, copy);
-                ctx.buffer_len += copy;
-                ctx.bit_len    += uint64_t(copy) * 8;
-                bytes          += copy;
-                len            -= copy;
+                std::memcpy(ctx->buffer + ctx->buffer_len, bytes, copy);
+                ctx->buffer_len += copy;
+                ctx->bit_len    += uint64_t(copy) * 8;
+                bytes           += copy;
+                len             -= copy;
 
-                if (ctx.buffer_len == 64)
+                if (ctx->buffer_len == 64)
                 {
-                    sha256_process_block_sha(ctx.state, ctx.buffer);
-                    ctx.buffer_len = 0;
+                    sha256_process_block_sha(ctx->state, ctx->buffer);
+                    ctx->buffer_len = 0;
                 }
             }
-
-            return ctx;
         }
 
         CKS_FUNC_ATTR_INTRINSICS_SHA256
-        SHA256 CKS_CALL_CONV sha256_end_sha(SHA256_Context ctx) noexcept
+        SHA256 CKS_CALL_CONV sha256_end_sha(SHA256_Context* ctx) noexcept
         {
-            uint32_t i = ctx.buffer_len;
-            ctx.buffer[i++] = 0x80;
+            uint32_t i = ctx->buffer_len;
+            ctx->buffer[i++] = 0x80;
 
             if (i > 56)
             {
                 while (i < 64)
-                    ctx.buffer[i++] = 0x00;
-                sha256_process_block_sha(ctx.state, ctx.buffer);
+                    ctx->buffer[i++] = 0x00;
+                sha256_process_block_sha(ctx->state, ctx->buffer);
                 i = 0;
             }
 
             while (i < 56)
-                ctx.buffer[i++] = 0x00;
+                ctx->buffer[i++] = 0x00;
 
-            ctx.buffer[56] = uint8_t(ctx.bit_len >> 56);
-            ctx.buffer[57] = uint8_t(ctx.bit_len >> 48);
-            ctx.buffer[58] = uint8_t(ctx.bit_len >> 40);
-            ctx.buffer[59] = uint8_t(ctx.bit_len >> 32);
-            ctx.buffer[60] = uint8_t(ctx.bit_len >> 24);
-            ctx.buffer[61] = uint8_t(ctx.bit_len >> 16);
-            ctx.buffer[62] = uint8_t(ctx.bit_len >>  8);
-            ctx.buffer[63] = uint8_t(ctx.bit_len >>  0);
+            ctx->buffer[56] = uint8_t(ctx->bit_len >> 56);
+            ctx->buffer[57] = uint8_t(ctx->bit_len >> 48);
+            ctx->buffer[58] = uint8_t(ctx->bit_len >> 40);
+            ctx->buffer[59] = uint8_t(ctx->bit_len >> 32);
+            ctx->buffer[60] = uint8_t(ctx->bit_len >> 24);
+            ctx->buffer[61] = uint8_t(ctx->bit_len >> 16);
+            ctx->buffer[62] = uint8_t(ctx->bit_len >>  8);
+            ctx->buffer[63] = uint8_t(ctx->bit_len >>  0);
 
-            sha256_process_block_sha(ctx.state, ctx.buffer);
+            sha256_process_block_sha(ctx->state, ctx->buffer);
 
             SHA256 result;
             for (int j = 0; j < 8; ++j)
             {
-                result.bytes[j * 4 + 0] = uint8_t(ctx.state[j] >> 24);
-                result.bytes[j * 4 + 1] = uint8_t(ctx.state[j] >> 16);
-                result.bytes[j * 4 + 2] = uint8_t(ctx.state[j] >>  8);
-                result.bytes[j * 4 + 3] = uint8_t(ctx.state[j] >>  0);
+                result.bytes[j * 4 + 0] = uint8_t(ctx->state[j] >> 24);
+                result.bytes[j * 4 + 1] = uint8_t(ctx->state[j] >> 16);
+                result.bytes[j * 4 + 2] = uint8_t(ctx->state[j] >>  8);
+                result.bytes[j * 4 + 3] = uint8_t(ctx->state[j] >>  0);
             }
             return result;
         }
@@ -563,66 +553,64 @@ namespace cks
         }
 
         CKS_FUNC_ATTR_INTRINSICS_ARM_SHA256
-        SHA256_Context CKS_CALL_CONV sha256_update_arm(SHA256_Context ctx, const void* data, size_t len) noexcept
+        void CKS_CALL_CONV sha256_update_arm(SHA256_Context* ctx, const void* data, size_t len) noexcept
         {
             const uint8_t* bytes = reinterpret_cast<const uint8_t*>(data);
 
             while (len > 0)
             {
-                uint32_t space = 64 - ctx.buffer_len;
+                uint32_t space = 64 - ctx->buffer_len;
                 uint32_t copy  = (len < space) ? uint32_t(len) : space;
 
-                std::memcpy(ctx.buffer + ctx.buffer_len, bytes, copy);
-                ctx.buffer_len += copy;
-                ctx.bit_len    += uint64_t(copy) * 8;
-                bytes          += copy;
-                len            -= copy;
+                std::memcpy(ctx->buffer + ctx->buffer_len, bytes, copy);
+                ctx->buffer_len += copy;
+                ctx->bit_len    += uint64_t(copy) * 8;
+                bytes           += copy;
+                len             -= copy;
 
-                if (ctx.buffer_len == 64)
+                if (ctx->buffer_len == 64)
                 {
-                    sha256_process_block_arm(ctx.state, ctx.buffer);
-                    ctx.buffer_len = 0;
+                    sha256_process_block_arm(ctx->state, ctx->buffer);
+                    ctx->buffer_len = 0;
                 }
             }
-
-            return ctx;
         }
 
         CKS_FUNC_ATTR_INTRINSICS_ARM_SHA256
-        SHA256 CKS_CALL_CONV sha256_end_arm(SHA256_Context ctx) noexcept
+        SHA256 CKS_CALL_CONV sha256_end_arm(SHA256_Context* ctx) noexcept
         {
-            uint32_t i = ctx.buffer_len;
-            ctx.buffer[i++] = 0x80;
+            uint32_t i = ctx->buffer_len;
+            ctx->buffer[i++] = 0x80;
 
             if (i > 56)
             {
                 while (i < 64)
-                    ctx.buffer[i++] = 0x00;
-                sha256_process_block_arm(ctx.state, ctx.buffer);
+                    ctx->buffer[i++] = 0x00;
+                sha256_process_block_arm(ctx->state, ctx->buffer);
                 i = 0;
             }
 
             while (i < 56)
-                ctx.buffer[i++] = 0x00;
+                ctx->buffer[i++] = 0x00;
 
-            ctx.buffer[56] = uint8_t(ctx.bit_len >> 56);
-            ctx.buffer[57] = uint8_t(ctx.bit_len >> 48);
-            ctx.buffer[58] = uint8_t(ctx.bit_len >> 40);
-            ctx.buffer[59] = uint8_t(ctx.bit_len >> 32);
-            ctx.buffer[60] = uint8_t(ctx.bit_len >> 24);
-            ctx.buffer[61] = uint8_t(ctx.bit_len >> 16);
-            ctx.buffer[62] = uint8_t(ctx.bit_len >>  8);
-            ctx.buffer[63] = uint8_t(ctx.bit_len >>  0);
+            ctx->buffer[56] = uint8_t(ctx->bit_len >> 56);
+            ctx->buffer[57] = uint8_t(ctx->bit_len >> 48);
+            ctx->buffer[58] = uint8_t(ctx->bit_len >> 40);
+            ctx->buffer[59] = uint8_t(ctx->bit_len >> 32);
+            ctx->buffer[60] = uint8_t(ctx->bit_len >> 24);
+            ctx->buffer[61] = uint8_t(ctx->bit_len >> 16);
+            ctx->buffer[62] = uint8_t(ctx->bit_len >>  8);
+            ctx->buffer[63] = uint8_t(ctx->bit_len >>  0);
 
-            sha256_process_block_arm(ctx.state, ctx.buffer);
+            sha256_process_block_arm(ctx->state, ctx->buffer);
 
             SHA256 result;
             for (int j = 0; j < 8; ++j)
             {
-                result.bytes[j * 4 + 0] = uint8_t(ctx.state[j] >> 24);
-                result.bytes[j * 4 + 1] = uint8_t(ctx.state[j] >> 16);
-                result.bytes[j * 4 + 2] = uint8_t(ctx.state[j] >>  8);
-                result.bytes[j * 4 + 3] = uint8_t(ctx.state[j] >>  0);
+                result.bytes[j * 4 + 0] = uint8_t(ctx->state[j] >> 24);
+                result.bytes[j * 4 + 1] = uint8_t(ctx->state[j] >> 16);
+                result.bytes[j * 4 + 2] = uint8_t(ctx->state[j] >>  8);
+                result.bytes[j * 4 + 3] = uint8_t(ctx->state[j] >>  0);
             }
             return result;
         }
@@ -637,8 +625,8 @@ namespace cks
     {
         struct SHA256Dispatch
         {
-            SHA256_Context (CKS_CALL_CONV *update)(SHA256_Context, const void*, size_t) noexcept;
-            SHA256         (CKS_CALL_CONV *end)   (SHA256_Context) noexcept;
+            void   (CKS_CALL_CONV *update)(SHA256_Context*, const void*, size_t) noexcept;
+            SHA256 (CKS_CALL_CONV *end)   (SHA256_Context*) noexcept;
         };
 
         SHA256Dispatch sha256_dispatch() noexcept
@@ -667,12 +655,12 @@ namespace cks
         }
     }
 
-    SHA256_Context CKS_CALL_CONV sha256_update(SHA256_Context ctx, const void* data, size_t len) noexcept
+    void CKS_CALL_CONV sha256_update(SHA256_Context* ctx, const void* data, size_t len) noexcept
     {
-        return sha256_dispatch().update(ctx, data, len);
+        sha256_dispatch().update(ctx, data, len);
     }
 
-    SHA256 CKS_CALL_CONV sha256_end(SHA256_Context ctx) noexcept
+    SHA256 CKS_CALL_CONV sha256_end(SHA256_Context* ctx) noexcept
     {
         return sha256_dispatch().end(ctx);
     }

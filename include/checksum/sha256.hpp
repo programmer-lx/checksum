@@ -56,31 +56,31 @@ namespace cks
     namespace detail
     {
         // 软件实现
-        SHA256_Context CKS_CALL_CONV sha256_update_soft(SHA256_Context ctx, const void* data, size_t len) noexcept;
-        SHA256 CKS_CALL_CONV sha256_end_soft(SHA256_Context ctx) noexcept;
+        void CKS_CALL_CONV sha256_update_soft(SHA256_Context* ctx, const void* data, size_t len) noexcept;
+        SHA256 CKS_CALL_CONV sha256_end_soft(SHA256_Context* ctx) noexcept;
 
         // x86 SHA-NI硬件实现
         #if CKS_ARCH_X86
         CKS_FUNC_ATTR_INTRINSICS_SHA256
-        SHA256_Context CKS_CALL_CONV sha256_update_sha(SHA256_Context ctx, const void* data, size_t len) noexcept;
+        void CKS_CALL_CONV sha256_update_sha(SHA256_Context* ctx, const void* data, size_t len) noexcept;
 
         CKS_FUNC_ATTR_INTRINSICS_SHA256
-        SHA256 CKS_CALL_CONV sha256_end_sha(SHA256_Context ctx) noexcept;
+        SHA256 CKS_CALL_CONV sha256_end_sha(SHA256_Context* ctx) noexcept;
         #endif
 
         // ARM SHA2硬件实现
         #if CKS_ARCH_ARM
         CKS_FUNC_ATTR_INTRINSICS_ARM_SHA256
-        SHA256_Context CKS_CALL_CONV sha256_update_arm(SHA256_Context ctx, const void* data, size_t len) noexcept;
+        void CKS_CALL_CONV sha256_update_arm(SHA256_Context* ctx, const void* data, size_t len) noexcept;
 
         CKS_FUNC_ATTR_INTRINSICS_ARM_SHA256
-        SHA256 CKS_CALL_CONV sha256_end_arm(SHA256_Context ctx) noexcept;
+        SHA256 CKS_CALL_CONV sha256_end_arm(SHA256_Context* ctx) noexcept;
         #endif
     }
 
-    // 更新哈希状态（处理数据块）- 按值传递，返回新状态
-    SHA256_Context CKS_CALL_CONV sha256_update(SHA256_Context ctx, const void* data, size_t len) noexcept;
+    // 更新哈希状态（处理数据块）
+    void CKS_CALL_CONV sha256_update(SHA256_Context* ctx, const void* data, size_t len) noexcept;
 
     // 最终化处理，返回32字节哈希值
-    SHA256 CKS_CALL_CONV sha256_end(SHA256_Context ctx) noexcept;
+    SHA256 CKS_CALL_CONV sha256_end(SHA256_Context* ctx) noexcept;
 }

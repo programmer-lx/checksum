@@ -49,16 +49,16 @@ TEST(SHA256, Standard)
     {
         // 软件实现
         SHA256_Context soft_ctx = sha256_begin();
-        soft_ctx = detail::sha256_update_soft(soft_ctx, vec.first.data(), vec.first.size());
-        SHA256 soft_result = sha256_end(soft_ctx);
+        detail::sha256_update_soft(&soft_ctx, vec.first.data(), vec.first.size());
+        SHA256 soft_result = sha256_end(&soft_ctx);
         EXPECT_EQ(to_hex(soft_result), vec.second) << "[soft] idx: " << idx;
 
         #if CKS_ARCH_X86
         // x86 SHA-NI实现
         {
             SHA256_Context shani_ctx = sha256_begin();
-            shani_ctx = detail::sha256_update_sha(shani_ctx, vec.first.data(), vec.first.size());
-            SHA256 shani_result = sha256_end(shani_ctx);
+            detail::sha256_update_sha(&shani_ctx, vec.first.data(), vec.first.size());
+            SHA256 shani_result = sha256_end(&shani_ctx);
             EXPECT_EQ(to_hex(shani_result), vec.second) << "[x86] idx: " << idx;
         }
         #endif
@@ -67,8 +67,8 @@ TEST(SHA256, Standard)
         // ARM实现
         {
             SHA256_Context arm_ctx = sha256_begin();
-            arm_ctx = detail::sha256_update_arm(arm_ctx, vec.first.data(), vec.first.size());
-            SHA256 arm_result = sha256_end(arm_ctx);
+            detail::sha256_update_arm(&arm_ctx, vec.first.data(), vec.first.size());
+            SHA256 arm_result = sha256_end(&arm_ctx);
             EXPECT_EQ(to_hex(arm_result), vec.second) << "[arm] idx: " << idx;
         }
         #endif
@@ -84,21 +84,21 @@ TEST(SHA256, EmptyBuffer)
     const char* expected_hex = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855";
 
     SHA256_Context ctx = sha256_begin();
-    SHA256 result = sha256_end(ctx);
+    SHA256 result = sha256_end(&ctx);
 
     EXPECT_EQ(to_hex(result), expected_hex);
 
     // 显式传入nullptr和0
     ctx = sha256_begin();
-    ctx = sha256_update(ctx, nullptr, 0);
-    result = sha256_end(ctx);
+    sha256_update(&ctx, nullptr, 0);
+    result = sha256_end(&ctx);
 
     EXPECT_EQ(to_hex(result), expected_hex);
 
     // 软件实现
     SHA256_Context soft_ctx = sha256_begin();
-    soft_ctx = detail::sha256_update_soft(soft_ctx, nullptr, 0);
-    SHA256 soft_result = sha256_end(soft_ctx);
+    detail::sha256_update_soft(&soft_ctx, nullptr, 0);
+    SHA256 soft_result = sha256_end(&soft_ctx);
 
     EXPECT_EQ(to_hex(soft_result), expected_hex);
 
@@ -106,8 +106,8 @@ TEST(SHA256, EmptyBuffer)
     // x86 SHA-NI实现
     {
         SHA256_Context shani_ctx = sha256_begin();
-        shani_ctx = detail::sha256_update_sha(shani_ctx, nullptr, 0);
-        SHA256 shani_result = sha256_end(shani_ctx);
+        detail::sha256_update_sha(&shani_ctx, nullptr, 0);
+        SHA256 shani_result = sha256_end(&shani_ctx);
         EXPECT_EQ(to_hex(shani_result), expected_hex);
     }
 #endif
@@ -116,8 +116,8 @@ TEST(SHA256, EmptyBuffer)
     // ARM实现
     {
         SHA256_Context arm_ctx = sha256_begin();
-        arm_ctx = detail::sha256_update_arm(arm_ctx, nullptr, 0);
-        SHA256 arm_result = sha256_end(arm_ctx);
+        detail::sha256_update_arm(&arm_ctx, nullptr, 0);
+        SHA256 arm_result = sha256_end(&arm_ctx);
         EXPECT_EQ(to_hex(arm_result), expected_hex);
     }
 #endif
@@ -137,13 +137,13 @@ TEST(SHA256, SmallBuffer)
 
         // 软件实现（基准）
         SHA256_Context soft_ctx = sha256_begin();
-        soft_ctx = detail::sha256_update_soft(soft_ctx, data.data(), data.size());
-        SHA256 soft_result = sha256_end(soft_ctx);
+        detail::sha256_update_soft(&soft_ctx, data.data(), data.size());
+        SHA256 soft_result = sha256_end(&soft_ctx);
 
         // 通用接口
         SHA256_Context ctx = sha256_begin();
-        ctx = sha256_update(ctx, data.data(), data.size());
-        SHA256 result = sha256_end(ctx);
+        sha256_update(&ctx, data.data(), data.size());
+        SHA256 result = sha256_end(&ctx);
 
         EXPECT_EQ(result, soft_result) << "Failed for length: " << len;
 
@@ -151,8 +151,8 @@ TEST(SHA256, SmallBuffer)
         // x86 SHA-NI实现
         {
             SHA256_Context shani_ctx = sha256_begin();
-            shani_ctx = detail::sha256_update_sha(shani_ctx, data.data(), data.size());
-            SHA256 shani_result = sha256_end(shani_ctx);
+            detail::sha256_update_sha(&shani_ctx, data.data(), data.size());
+            SHA256 shani_result = sha256_end(&shani_ctx);
             EXPECT_EQ(shani_result, soft_result) << "SHA-NI failed for length: " << len;
         }
 #endif
@@ -161,8 +161,8 @@ TEST(SHA256, SmallBuffer)
         // ARM实现
         {
             SHA256_Context arm_ctx = sha256_begin();
-            arm_ctx = detail::sha256_update_arm(arm_ctx, data.data(), data.size());
-            SHA256 arm_result = sha256_end(arm_ctx);
+            detail::sha256_update_arm(&arm_ctx, data.data(), data.size());
+            SHA256 arm_result = sha256_end(&arm_ctx);
             EXPECT_EQ(arm_result, soft_result) << "ARM failed for length: " << len;
         }
 #endif
@@ -187,21 +187,21 @@ TEST(SHA256, UnalignedMemory)
 
         // 软件实现（基准）
         SHA256_Context soft_ctx = sha256_begin();
-        soft_ctx = detail::sha256_update_soft(soft_ctx, unaligned_data, len);
-        SHA256 soft_result = sha256_end(soft_ctx);
+        detail::sha256_update_soft(&soft_ctx, unaligned_data, len);
+        SHA256 soft_result = sha256_end(&soft_ctx);
 
         // 通用接口
         SHA256_Context ctx = sha256_begin();
-        ctx = sha256_update(ctx, unaligned_data, len);
-        SHA256 result = sha256_end(ctx);
+        sha256_update(&ctx, unaligned_data, len);
+        SHA256 result = sha256_end(&ctx);
 
         EXPECT_EQ(result, soft_result) << "Failed for offset: " << offset;
 
 #if CKS_ARCH_X86
         {
             SHA256_Context shani_ctx = sha256_begin();
-            shani_ctx = detail::sha256_update_sha(shani_ctx, unaligned_data, len);
-            SHA256 shani_result = sha256_end(shani_ctx);
+            detail::sha256_update_sha(&shani_ctx, unaligned_data, len);
+            SHA256 shani_result = sha256_end(&shani_ctx);
             EXPECT_EQ(shani_result, soft_result) << "SHA-NI failed for offset: " << offset;
         }
 #endif
@@ -209,8 +209,8 @@ TEST(SHA256, UnalignedMemory)
 #if CKS_ARCH_ARM
         {
             SHA256_Context arm_ctx = sha256_begin();
-            arm_ctx = detail::sha256_update_arm(arm_ctx, unaligned_data, len);
-            SHA256 arm_result = sha256_end(arm_ctx);
+            detail::sha256_update_arm(&arm_ctx, unaligned_data, len);
+            SHA256 arm_result = sha256_end(&arm_ctx);
             EXPECT_EQ(arm_result, soft_result) << "ARM failed for offset: " << offset;
         }
 #endif
@@ -229,8 +229,8 @@ TEST(SHA256, SegmentConsistency)
 
     // 一次性计算（软件实现基准）
     SHA256_Context soft_ctx = sha256_begin();
-    soft_ctx = detail::sha256_update_soft(soft_ctx, data.data(), data.size());
-    SHA256 soft_full = sha256_end(soft_ctx);
+    detail::sha256_update_soft(&soft_ctx, data.data(), data.size());
+    SHA256 soft_full = sha256_end(&soft_ctx);
 
     // 分段计算 - 软件实现
     {
@@ -239,10 +239,10 @@ TEST(SHA256, SegmentConsistency)
         while (pos < data.size())
         {
             size_t chunk = (pos + 100 <= data.size()) ? 100 : (data.size() - pos);
-            ctx = detail::sha256_update_soft(ctx, data.data() + pos, chunk);
+            detail::sha256_update_soft(&ctx, data.data() + pos, chunk);
             pos += chunk;
         }
-        SHA256 result = sha256_end(ctx);
+        SHA256 result = sha256_end(&ctx);
         EXPECT_EQ(result, soft_full);
     }
 
@@ -253,10 +253,10 @@ TEST(SHA256, SegmentConsistency)
         while (pos < data.size())
         {
             size_t chunk = (pos + 50 <= data.size()) ? 50 : (data.size() - pos);
-            ctx = sha256_update(ctx, data.data() + pos, chunk);
+            sha256_update(&ctx, data.data() + pos, chunk);
             pos += chunk;
         }
-        SHA256 result = sha256_end(ctx);
+        SHA256 result = sha256_end(&ctx);
         EXPECT_EQ(result, soft_full);
     }
 
@@ -268,10 +268,10 @@ TEST(SHA256, SegmentConsistency)
         while (pos < data.size())
         {
             size_t chunk = (pos + 75 <= data.size()) ? 75 : (data.size() - pos);
-            ctx = detail::sha256_update_sha(ctx, data.data() + pos, chunk);
+            detail::sha256_update_sha(&ctx, data.data() + pos, chunk);
             pos += chunk;
         }
-        SHA256 result = sha256_end(ctx);
+        SHA256 result = sha256_end(&ctx);
         EXPECT_EQ(result, soft_full);
     }
 #endif
@@ -284,10 +284,10 @@ TEST(SHA256, SegmentConsistency)
         while (pos < data.size())
         {
             size_t chunk = (pos + 60 <= data.size()) ? 60 : (data.size() - pos);
-            ctx = detail::sha256_update_arm(ctx, data.data() + pos, chunk);
+            detail::sha256_update_arm(&ctx, data.data() + pos, chunk);
             pos += chunk;
         }
-        SHA256 result = sha256_end(ctx);
+        SHA256 result = sha256_end(&ctx);
         EXPECT_EQ(result, soft_full);
     }
 #endif
@@ -305,21 +305,21 @@ TEST(SHA256, LargeBufferStress)
 
     // 软件实现（基准）
     SHA256_Context soft_ctx = sha256_begin();
-    soft_ctx = detail::sha256_update_soft(soft_ctx, data.data(), data.size());
-    SHA256 soft_result = sha256_end(soft_ctx);
+    detail::sha256_update_soft(&soft_ctx, data.data(), data.size());
+    SHA256 soft_result = sha256_end(&soft_ctx);
 
     // 通用接口
     SHA256_Context ctx = sha256_begin();
-    ctx = sha256_update(ctx, data.data(), data.size());
-    SHA256 result = sha256_end(ctx);
+    sha256_update(&ctx, data.data(), data.size());
+    SHA256 result = sha256_end(&ctx);
 
     EXPECT_EQ(result, soft_result);
 
 #if CKS_ARCH_X86
     {
         SHA256_Context shani_ctx = sha256_begin();
-        shani_ctx = detail::sha256_update_sha(shani_ctx, data.data(), data.size());
-        SHA256 shani_result = sha256_end(shani_ctx);
+        detail::sha256_update_sha(&shani_ctx, data.data(), data.size());
+        SHA256 shani_result = sha256_end(&shani_ctx);
         EXPECT_EQ(shani_result, soft_result);
     }
 #endif
@@ -327,8 +327,8 @@ TEST(SHA256, LargeBufferStress)
 #if CKS_ARCH_ARM
     {
         SHA256_Context arm_ctx = sha256_begin();
-        arm_ctx = detail::sha256_update_arm(arm_ctx, data.data(), data.size());
-        SHA256 arm_result = sha256_end(arm_ctx);
+        detail::sha256_update_arm(&arm_ctx, data.data(), data.size());
+        SHA256 arm_result = sha256_end(&arm_ctx);
         EXPECT_EQ(arm_result, soft_result);
     }
 #endif
@@ -352,19 +352,19 @@ TEST(SHA256, MillionA)
 
     for (size_t i = 0; i < count / sizeof(chunk); ++i)
     {
-        ctx = sha256_update(ctx, chunk, sizeof(chunk));
+        sha256_update(&ctx, chunk, sizeof(chunk));
     }
 
-    SHA256 result = sha256_end(ctx);
+    SHA256 result = sha256_end(&ctx);
     EXPECT_EQ(to_hex(result), expected_hex);
 
     // 软件实现验证
     SHA256_Context soft_ctx = sha256_begin();
     for (size_t i = 0; i < count / sizeof(chunk); ++i)
     {
-        soft_ctx = detail::sha256_update_soft(soft_ctx, chunk, sizeof(chunk));
+        detail::sha256_update_soft(&soft_ctx, chunk, sizeof(chunk));
     }
-    SHA256 soft_result = sha256_end(soft_ctx);
+    SHA256 soft_result = sha256_end(&soft_ctx);
     EXPECT_EQ(to_hex(soft_result), expected_hex);
     EXPECT_EQ(result, soft_result);
 }
@@ -385,12 +385,12 @@ TEST(SHA256, BlockBoundary)
         }
 
         SHA256_Context soft_ctx = sha256_begin();
-        soft_ctx = detail::sha256_update_soft(soft_ctx, data.data(), data.size());
-        SHA256 soft_result = sha256_end(soft_ctx);
+        detail::sha256_update_soft(&soft_ctx, data.data(), data.size());
+        SHA256 soft_result = sha256_end(&soft_ctx);
 
         SHA256_Context ctx = sha256_begin();
-        ctx = sha256_update(ctx, data.data(), data.size());
-        SHA256 result = sha256_end(ctx);
+        sha256_update(&ctx, data.data(), data.size());
+        SHA256 result = sha256_end(&ctx);
 
         EXPECT_EQ(result, soft_result) << "Failed for length: " << len;
     }

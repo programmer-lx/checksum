@@ -54,8 +54,8 @@ namespace cks
     }
 
     // 更新哈希状态
-    MD5_Context CKS_CALL_CONV md5_update(MD5_Context ctx, const void* data, size_t len) noexcept;
+    void CKS_CALL_CONV md5_update(MD5_Context* ctx, const void* data, size_t len) noexcept;
 
     // 最终化处理，返回16字节哈希值
-    MD5 CKS_CALL_CONV md5_end(MD5_Context ctx) noexcept;
+    MD5 CKS_CALL_CONV md5_end(MD5_Context* ctx) noexcept;
 }
