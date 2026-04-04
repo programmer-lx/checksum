@@ -30,3 +30,4 @@ function(cks_add_test test_file test_name)
 endfunction()
 
 cks_add_test(crc32c.cpp crc32c)
+cks_add_test(sha256.cpp sha256)
