@@ -4,8 +4,6 @@
 #include <cstddef>
 
 #include "checksum/detail/base.hpp"
-#include "checksum/detail/arch.hpp"
-#include "checksum/detail/attributes.hpp"
 
 namespace cks
 {

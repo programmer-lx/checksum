@@ -2,9 +2,6 @@
 
 #include <cstring> // std::memcpy
 
-#include "checksum/detail/arch.hpp"
-#include "checksum/detail/cpu.hpp"
-
 #if CKS_ARCH_X86
 #include <immintrin.h>
 #include <wmmintrin.h>
@@ -14,6 +11,8 @@
 #include <arm_neon.h>
 #include <arm_acle.h>
 #endif
+
+#include "checksum/detail/cpu.hpp"
 
 namespace cks
 {

@@ -3,8 +3,6 @@
 #include <array>
 #include <cstring> // std::memcpy
 
-#include "checksum/detail/arch.hpp"
-
 #if CKS_ARCH_X86
 #include <nmmintrin.h>
 #endif

@@ -2,9 +2,6 @@
 
 #include <cstring> // std::memcpy
 
-#include "checksum/detail/os_detect.hpp"
-#include "checksum/detail/arch.hpp"
-
 #if CKS_ARCH_X86
 #include <immintrin.h> // SSE/AVX intrinsics
 #endif
