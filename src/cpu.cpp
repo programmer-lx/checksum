@@ -3,6 +3,7 @@
 #include <cstdint>
 #include <cstring>
 
+#include "checksum/detail/os_detect.hpp"
 #include "checksum/detail/arch.hpp"
 
 #if CKS_ARCH_X86
@@ -12,6 +13,13 @@
         #include <cpuid.h>
     #endif
     #include <emmintrin.h>
+#endif
+
+#if CKS_ARCH_ARM
+    #if CKS_OS_LINUX
+        #include <sys/auxv.h>
+        #include <asm/hwcap.h>
+    #endif
 #endif
 
 #include "checksum/detail/common.hpp"
@@ -339,7 +347,18 @@ namespace cks::cpu
 
     Info info() noexcept
     {
-        return {};
+        Info result{};
+
+        #if CKS_OS_LINUX
+        unsigned long hwcap = getauxval(AT_HWCAP);
+
+        result.neon = (hwcap & HWCAP_ASIMD) ? 1 : 0;
+        result.arm_sha2 = (hwcap & HWCAP_SHA2) ? 1 : 0;
+        result.arm_crc32 = (hwcap & HWCAP_CRC32) ? 1 : 0;
+        result.sve = (hwcap & HWCAP_SVE) ? 1 : 0;
+        #endif
+
+        return result;
     }
 
 #endif

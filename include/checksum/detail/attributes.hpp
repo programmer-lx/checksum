@@ -126,9 +126,12 @@
 
 #define CKS_FUNC_ATTR_INTRINSICS_ARM_CRC32
 #define CKS_FUNC_ATTR_INTRINSICS_SHA
+#define CKS_FUNC_ATTR_INTRINSICS_SHA256
 #define CKS_FUNC_ATTR_INTRINSICS_ARM_SHA2
 
 #if CKS_COMPILER_GCC || CKS_COMPILER_CLANG || CKS_COMPILER_CLANG_CL
+
+    // ------------------ X86 ------------------
 
     #undef CKS_FUNC_ATTR_INTRINSICS_SSE
     #define CKS_FUNC_ATTR_INTRINSICS_SSE __attribute__((target("sse")))
@@ -163,11 +166,17 @@
     #undef CKS_FUNC_ATTR_INTRINSICS_AVX512_F
     #define CKS_FUNC_ATTR_INTRINSICS_AVX512_F __attribute__((target("avx512f")))
 
-    #undef CKS_FUNC_ATTR_INTRINSICS_ARM_CRC32
-    #define CKS_FUNC_ATTR_INTRINSICS_ARM_CRC32 __attribute__((target("+crc")))
-
     #undef CKS_FUNC_ATTR_INTRINSICS_SHA
     #define CKS_FUNC_ATTR_INTRINSICS_SHA __attribute__((target("sha")))
+    
+    #undef CKS_FUNC_ATTR_INTRINSICS_SHA256
+    #define CKS_FUNC_ATTR_INTRINSICS_SHA256 __attribute__((target("sha,sse4.1")))
+
+
+    // ------------------ ARM ------------------
+
+    #undef CKS_FUNC_ATTR_INTRINSICS_ARM_CRC32
+    #define CKS_FUNC_ATTR_INTRINSICS_ARM_CRC32 __attribute__((target("+crc")))
 
     #undef CKS_FUNC_ATTR_INTRINSICS_ARM_SHA2
     #define CKS_FUNC_ATTR_INTRINSICS_ARM_SHA2 __attribute__((target("+crypto")))

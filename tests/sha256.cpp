@@ -57,7 +57,7 @@ TEST(SHA256, Standard)
         // x86 SHA-NI实现
         {
             SHA256_Context shani_ctx = sha256_begin();
-            shani_ctx = detail::sha256_update_shani(shani_ctx, vec.first.data(), vec.first.size());
+            shani_ctx = detail::sha256_update_sha(shani_ctx, vec.first.data(), vec.first.size());
             SHA256 shani_result = sha256_end(shani_ctx);
             EXPECT_EQ(to_hex(shani_result), vec.second) << "[x86] idx: " << idx;
         }
@@ -106,7 +106,7 @@ TEST(SHA256, EmptyBuffer)
     // x86 SHA-NI实现
     {
         SHA256_Context shani_ctx = sha256_begin();
-        shani_ctx = detail::sha256_update_shani(shani_ctx, nullptr, 0);
+        shani_ctx = detail::sha256_update_sha(shani_ctx, nullptr, 0);
         SHA256 shani_result = sha256_end(shani_ctx);
         EXPECT_EQ(to_hex(shani_result), expected_hex);
     }
@@ -151,7 +151,7 @@ TEST(SHA256, SmallBuffer)
         // x86 SHA-NI实现
         {
             SHA256_Context shani_ctx = sha256_begin();
-            shani_ctx = detail::sha256_update_shani(shani_ctx, data.data(), data.size());
+            shani_ctx = detail::sha256_update_sha(shani_ctx, data.data(), data.size());
             SHA256 shani_result = sha256_end(shani_ctx);
             EXPECT_EQ(shani_result, soft_result) << "SHA-NI failed for length: " << len;
         }
@@ -200,7 +200,7 @@ TEST(SHA256, UnalignedMemory)
 #if CKS_ARCH_X86
         {
             SHA256_Context shani_ctx = sha256_begin();
-            shani_ctx = detail::sha256_update_shani(shani_ctx, unaligned_data, len);
+            shani_ctx = detail::sha256_update_sha(shani_ctx, unaligned_data, len);
             SHA256 shani_result = sha256_end(shani_ctx);
             EXPECT_EQ(shani_result, soft_result) << "SHA-NI failed for offset: " << offset;
         }
@@ -268,7 +268,7 @@ TEST(SHA256, SegmentConsistency)
         while (pos < data.size())
         {
             size_t chunk = (pos + 75 <= data.size()) ? 75 : (data.size() - pos);
-            ctx = detail::sha256_update_shani(ctx, data.data() + pos, chunk);
+            ctx = detail::sha256_update_sha(ctx, data.data() + pos, chunk);
             pos += chunk;
         }
         SHA256 result = sha256_end(ctx);
@@ -318,7 +318,7 @@ TEST(SHA256, LargeBufferStress)
 #if CKS_ARCH_X86
     {
         SHA256_Context shani_ctx = sha256_begin();
-        shani_ctx = detail::sha256_update_shani(shani_ctx, data.data(), data.size());
+        shani_ctx = detail::sha256_update_sha(shani_ctx, data.data(), data.size());
         SHA256 shani_result = sha256_end(shani_ctx);
         EXPECT_EQ(shani_result, soft_result);
     }

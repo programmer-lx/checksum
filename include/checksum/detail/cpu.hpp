@@ -73,6 +73,7 @@ namespace cks::cpu
         unsigned neon                   : 1 = 0;
         unsigned sve                    : 1 = 0;
         unsigned arm_crc32              : 1 = 0;
+        unsigned arm_sha2               : 1 = 0;
     };
 
     Info info() noexcept;

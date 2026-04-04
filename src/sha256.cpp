@@ -2,15 +2,16 @@
 
 #include <cstring> // std::memcpy
 
+#include "checksum/detail/os_detect.hpp"
 #include "checksum/detail/arch.hpp"
 
 #if CKS_ARCH_X86
-#include <immintrin.h> // SHA-NI intrinsics
+    #include <immintrin.h> // SHA-NI intrinsics
 #endif
 
 #if CKS_ARCH_ARM
-#include <arm_acle.h>
-#include <arm_neon.h>
+    #include <arm_acle.h>
+    #include <arm_neon.h>
 #endif
 
 #include "checksum/detail/cpu.hpp"
@@ -155,8 +156,8 @@ namespace cks
         }
 
 #if CKS_ARCH_X86
-        CKS_FUNC_ATTR_INTRINSICS_SHA CKS_FUNC_ATTR_INTRINSICS_SSE4_2
-        SHA256_Context CKS_CALL_CONV sha256_update_shani(SHA256_Context ctx, const void* data, size_t len) noexcept
+        CKS_FUNC_ATTR_INTRINSICS_SHA256
+        SHA256_Context CKS_CALL_CONV sha256_update_sha(SHA256_Context ctx, const void* data, size_t len) noexcept
         {
             if (!data || len == 0)
                 return ctx;
@@ -226,7 +227,134 @@ namespace cks
 
             return ctx;
         }
-#endif
+#endif // X86
+
+#if CKS_ARCH_ARM
+        CKS_FUNC_ATTR_INTRINSICS_ARM_SHA2
+        inline void sha256_transform_arm(uint32_t state[8], const uint8_t block[64]) noexcept
+        {
+            // 加载当前状态 (abcd 和 efgh)
+            uint32x4_t abcd = vld1q_u32(&state[0]);
+            uint32x4_t efgh = vld1q_u32(&state[4]);
+
+            // 加载消息块 (大端转小端)
+            uint32x4_t w0 = vreinterpretq_u32_u8(vrev32q_u8(vld1q_u8(block)));
+            uint32x4_t w1 = vreinterpretq_u32_u8(vrev32q_u8(vld1q_u8(block + 16)));
+            uint32x4_t w2 = vreinterpretq_u32_u8(vrev32q_u8(vld1q_u8(block + 32)));
+            uint32x4_t w3 = vreinterpretq_u32_u8(vrev32q_u8(vld1q_u8(block + 48)));
+
+            // 前16轮: Rounds 0-3
+            uint32x4_t wk = vaddq_u32(w0, vld1q_u32(&K[0]));
+            uint32x4_t abcd_prev = abcd;
+            abcd = vsha256hq_u32(abcd, efgh, wk);
+            efgh = vsha256h2q_u32(efgh, abcd_prev, wk);
+
+            // Rounds 4-7
+            wk = vaddq_u32(w1, vld1q_u32(&K[4]));
+            abcd_prev = abcd;
+            abcd = vsha256hq_u32(abcd, efgh, wk);
+            efgh = vsha256h2q_u32(efgh, abcd_prev, wk);
+
+            // Rounds 8-11
+            wk = vaddq_u32(w2, vld1q_u32(&K[8]));
+            abcd_prev = abcd;
+            abcd = vsha256hq_u32(abcd, efgh, wk);
+            efgh = vsha256h2q_u32(efgh, abcd_prev, wk);
+
+            // Rounds 12-15
+            wk = vaddq_u32(w3, vld1q_u32(&K[12]));
+            abcd_prev = abcd;
+            abcd = vsha256hq_u32(abcd, efgh, wk);
+            efgh = vsha256h2q_u32(efgh, abcd_prev, wk);
+
+            // Rounds 16-63 (使用消息调度)
+            for (int i = 16; i < 64; i += 16)
+            {
+                // 更新 w0-w3 用于下一轮
+                // msg0 = su1(su0(msg0), msg2, msg3)
+                w0 = vsha256su1q_u32(vsha256su0q_u32(w0, w1), w2, w3);
+                wk = vaddq_u32(w0, vld1q_u32(&K[i]));
+                abcd_prev = abcd;
+                abcd = vsha256hq_u32(abcd, efgh, wk);
+                efgh = vsha256h2q_u32(efgh, abcd_prev, wk);
+
+                w1 = vsha256su1q_u32(vsha256su0q_u32(w1, w2), w3, w0);
+                wk = vaddq_u32(w1, vld1q_u32(&K[i + 4]));
+                abcd_prev = abcd;
+                abcd = vsha256hq_u32(abcd, efgh, wk);
+                efgh = vsha256h2q_u32(efgh, abcd_prev, wk);
+
+                w2 = vsha256su1q_u32(vsha256su0q_u32(w2, w3), w0, w1);
+                wk = vaddq_u32(w2, vld1q_u32(&K[i + 8]));
+                abcd_prev = abcd;
+                abcd = vsha256hq_u32(abcd, efgh, wk);
+                efgh = vsha256h2q_u32(efgh, abcd_prev, wk);
+
+                w3 = vsha256su1q_u32(vsha256su0q_u32(w3, w0), w1, w2);
+                wk = vaddq_u32(w3, vld1q_u32(&K[i + 12]));
+                abcd_prev = abcd;
+                abcd = vsha256hq_u32(abcd, efgh, wk);
+                efgh = vsha256h2q_u32(efgh, abcd_prev, wk);
+            }
+
+            // 累加到原状态
+            uint32x4_t state0 = vld1q_u32(&state[0]);
+            uint32x4_t state1 = vld1q_u32(&state[4]);
+            abcd = vaddq_u32(abcd, state0);
+            efgh = vaddq_u32(efgh, state1);
+
+            vst1q_u32(&state[0], abcd);
+            vst1q_u32(&state[4], efgh);
+        }
+
+        CKS_FUNC_ATTR_INTRINSICS_ARM_SHA2
+        SHA256_Context CKS_CALL_CONV sha256_update_arm(SHA256_Context ctx, const void* data, size_t len) noexcept
+        {
+            if (!data || len == 0)
+                return ctx;
+
+            const uint8_t* bytes = static_cast<const uint8_t*>(data);
+
+            // 更新总消息长度
+            ctx.bit_len += static_cast<uint64_t>(len) * 8;
+
+            // 如果缓冲区有数据，尝试填满64字节块
+            if (ctx.buffer_len > 0)
+            {
+                size_t needed = 64 - ctx.buffer_len;
+                size_t copy_len = (len < needed) ? len : needed;
+
+                std::memcpy(ctx.buffer + ctx.buffer_len, bytes, copy_len);
+                ctx.buffer_len += static_cast<uint32_t>(copy_len);
+                bytes += copy_len;
+                len -= copy_len;
+
+                // 如果缓冲区满了，处理它
+                if (ctx.buffer_len == 64)
+                {
+                    sha256_transform_arm(ctx.state, ctx.buffer);
+                    ctx.buffer_len = 0;
+                }
+            }
+
+            // 处理完整的64字节块
+            while (len >= 64)
+            {
+                sha256_transform_arm(ctx.state, bytes);
+                bytes += 64;
+                len -= 64;
+            }
+
+            // 保存剩余数据到缓冲区
+            if (len > 0)
+            {
+                std::memcpy(ctx.buffer, bytes, len);
+                ctx.buffer_len = static_cast<uint32_t>(len);
+            }
+
+            return ctx;
+        }
+#endif // ARM
     }
 
     namespace
@@ -238,10 +366,19 @@ namespace cks
                 const cpu::Info& info = cpu::get_singleton_info();
 
 #if CKS_ARCH_X86
-                if (info.sha)
+                if (info.sha && info.sse4_1)
                 {
-                    return detail::sha256_update_shani;
+                    return detail::sha256_update_sha;
                 }
+#endif
+
+#if CKS_ARCH_ARM
+    #if CKS_OS_LINUX // TODO 暂时只支持linux
+                if (info.arm_sha2)
+                {
+                    return detail::sha256_update_arm;
+                }
+    #endif
 #endif
 
                 return detail::sha256_update_soft;
