@@ -31,3 +31,4 @@ endfunction()
 
 cks_add_test(crc32c.cpp crc32c)
 cks_add_test(sha256.cpp sha256)
+cks_add_test(md5.cpp md5)

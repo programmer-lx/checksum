@@ -230,7 +230,7 @@ namespace cks
 #endif // X86
 
 #if CKS_ARCH_ARM
-        CKS_FUNC_ATTR_INTRINSICS_ARM_SHA2
+        CKS_FUNC_ATTR_INTRINSICS_ARM_SHA256
         inline void sha256_transform_arm(uint32_t state[8], const uint8_t block[64]) noexcept
         {
             // 加载当前状态 (abcd 和 efgh)
@@ -307,7 +307,7 @@ namespace cks
             vst1q_u32(&state[4], efgh);
         }
 
-        CKS_FUNC_ATTR_INTRINSICS_ARM_SHA2
+        CKS_FUNC_ATTR_INTRINSICS_ARM_SHA256
         SHA256_Context CKS_CALL_CONV sha256_update_arm(SHA256_Context ctx, const void* data, size_t len) noexcept
         {
             if (!data || len == 0)

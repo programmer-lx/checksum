@@ -70,7 +70,7 @@ namespace cks
 
         // ARM SHA2硬件实现
         #if CKS_ARCH_ARM
-        CKS_FUNC_ATTR_INTRINSICS_ARM_SHA2
+        CKS_FUNC_ATTR_INTRINSICS_ARM_SHA256
         SHA256_Context CKS_CALL_CONV sha256_update_arm(SHA256_Context ctx, const void* data, size_t len) noexcept;
         #endif
     }
