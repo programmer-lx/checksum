@@ -37,5 +37,5 @@ namespace cks
         #endif
     }
 
-    CRC32C CKS_CALL_CONV crc32c_update(CRC32C crc, const void* data, size_t size) noexcept;
+    CKS_API CRC32C CKS_CALL_CONV crc32c_update(CRC32C crc, const void* data, size_t size) noexcept;
 }

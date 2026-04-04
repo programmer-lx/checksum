@@ -26,9 +26,23 @@ function(cks_add_test test_file test_name)
 
     target_link_libraries(${test_name} PRIVATE checksum gtest)
 
+    # copy DLL
+    if(CKS_BUILD_DLL)
+        add_custom_command(TARGET ${test_name} POST_BUILD
+            COMMAND ${CMAKE_COMMAND} -E copy
+                $<TARGET_FILE:checksum>             # 源文件：checksum.dll 的路径
+                $<TARGET_FILE_DIR:${test_name}>     # 目标目录
+        )
+    endif()
+
     add_test(NAME test_${test_name} COMMAND ${test_name})
 endfunction()
 
-cks_add_test(crc32c.cpp crc32c)
-cks_add_test(sha256.cpp sha256)
-cks_add_test(md5.cpp md5)
+if(CKS_BUILD_DLL)
+    cks_add_test(dll.cpp dll)
+else()
+    cks_add_test(build.cpp build)
+    cks_add_test(crc32c.cpp crc32c)
+    cks_add_test(sha256.cpp sha256)
+    cks_add_test(md5.cpp md5)
+endif()

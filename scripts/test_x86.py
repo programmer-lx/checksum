@@ -85,39 +85,46 @@ def main():
     if args.test_mode == "max":
         build_options += ["Debug"]
 
+    # 是否编译成DLL
+    dll_options = ["OFF"]
+    if CURRENT_OS == "windows":
+        dll_options = ["ON", "OFF"]
+
     for name, c_comp, cxx_comp, subdir in configs:
         for build_cfg in build_options:
-            current_build_dir = build_base / f"{subdir}_{build_cfg}"
-            
-            print(f"\n{'='*60}\nTarget: {name} | Config: {build_cfg}\n{'='*60}")
+            for dll_opt in dll_options:
+                current_build_dir = build_base / f"{subdir}_{build_cfg}_dll_{dll_opt}"
+                
+                print(f"\n{'='*60}\nTarget: {name} | Config: {build_cfg} | DLL: {dll_opt}\n{'='*60}")
 
-            # 1. configure
-            config_args = [
-                "cmake", "-S", project_root, "-B", current_build_dir,
-                "-G", "Ninja Multi-Config",
-                f"-DCMAKE_C_COMPILER={c_comp}",
-                f"-DCMAKE_CXX_COMPILER={cxx_comp}",
-                "-DCKS_BUILD_TESTS=ON",
-                f"-DCMAKE_CROSSCOMPILING_EMULATOR={sde_bin};-future;--"
-            ]
+                # 1. configure
+                config_args = [
+                    "cmake", "-S", project_root, "-B", current_build_dir,
+                    "-G", "Ninja Multi-Config",
+                    f"-DCMAKE_C_COMPILER={c_comp}",
+                    f"-DCMAKE_CXX_COMPILER={cxx_comp}",
+                    "-DCKS_BUILD_TESTS=ON",
+                    f"-DCKS_BUILD_DLL={dll_opt}",
+                    f"-DCMAKE_CROSSCOMPILING_EMULATOR={sde_bin};-future;--"
+                ]
 
-            if CURRENT_OS == "linux":
-                config_args.append("-DCMAKE_EXE_LINKER_FLAGS=-static");
+                if CURRENT_OS == "linux":
+                    config_args.append("-DCMAKE_EXE_LINKER_FLAGS=-static");
 
-            run_command(config_args)
+                run_command(config_args)
 
-            # 2. 编译
-            run_command(["cmake", "--build", current_build_dir, "--config", build_cfg])
+                # 2. 编译
+                run_command(["cmake", "--build", current_build_dir, "--config", build_cfg])
 
-            # 3. 测试
-            ctest_bin = shutil.which("ctest")
-            if not ctest_bin:
-                print("Error: 'ctest' not found in PATH.")
-                sys.exit(1)
+                # 3. 测试
+                ctest_bin = shutil.which("ctest")
+                if not ctest_bin:
+                    print("Error: 'ctest' not found in PATH.")
+                    sys.exit(1)
 
-            run_command([
-                ctest_bin, "--output-on-failure", "--test-dir", current_build_dir, "-C", build_cfg
-            ])
+                run_command([
+                    ctest_bin, "--output-on-failure", "--test-dir", current_build_dir, "-C", build_cfg
+                ])
 
     print("\n[SUCCESS] All X86 tests passed.")
 

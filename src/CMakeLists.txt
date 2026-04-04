@@ -2,8 +2,10 @@
 file(GLOB_RECURSE CKS_SOURCE ${CMAKE_CURRENT_SOURCE_DIR} "*.cpp")
 if(CKS_BUILD_DLL)
     add_library(checksum SHARED ${CKS_SOURCE})
+    target_compile_definitions(checksum PRIVATE CKS_BUILD_DLL)
 else()
     add_library(checksum STATIC ${CKS_SOURCE})
+    target_compile_definitions(checksum PUBLIC CKS_BUILD_STATIC)
 endif()
 
 target_include_directories(checksum PUBLIC ${CKS_ROOT_DIR}/include)

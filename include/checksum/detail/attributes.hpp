@@ -1,5 +1,6 @@
 #pragma once
 
+#include "checksum/detail/os_detect.hpp"
 #include "checksum/detail/compiler.hpp"
 
 // inline | noinline | flatten
@@ -27,7 +28,7 @@
 #endif
 
 // dll import export
-#if CKS_COMPILER_MSVC
+#if CKS_OS_WINDOWS
     #define CKS_DLL_IMPORT        __declspec(dllimport)
     #define CKS_DLL_EXPORT        __declspec(dllexport)
     #define CKS_DLL_LOCAL

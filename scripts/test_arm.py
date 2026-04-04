@@ -48,48 +48,53 @@ def main():
     if args.test_mode == "max":
         build_options += ["Debug"]
 
+    # 是否编译成DLL
+    dll_options = ["OFF"]
+
     for name, c_compiler, cxx_compiler, subdir in configs:
         for build_cfg in build_options:
-            current_build_dir = build_base / f"{subdir}_{build_cfg}"
-            
-            print(f"\n{'='*60}\nTarget: {name} | Config: {build_cfg}\n{'='*60}")
+            for dll_opt in dll_options:
+                current_build_dir = build_base / f"{subdir}_{build_cfg}_dll_{dll_opt}"
+                
+                print(f"\n{'='*60}\nTarget: {name} | Config: {build_cfg} | DLL: {dll_opt}\n{'='*60}")
 
-            # 1. 配置
-            # name -> c_flags
-            c_flags = {
-                "Clang-17": "--target=aarch64-linux-gnu -march=armv8-a",
-                "GCC": "-march=armv8-a"
-            }
+                # 1. 配置
+                # name -> c_flags
+                c_flags = {
+                    "Clang-17": "--target=aarch64-linux-gnu -march=armv8-a",
+                    "GCC": "-march=armv8-a"
+                }
 
-            cxx_flags = {
-                "Clang-17": "--target=aarch64-linux-gnu -march=armv8-a",
-                "GCC": "-march=armv8-a"
-            }
+                cxx_flags = {
+                    "Clang-17": "--target=aarch64-linux-gnu -march=armv8-a",
+                    "GCC": "-march=armv8-a"
+                }
 
-            config_args = [
-                "cmake", "-S", str(project_root), "-B", str(current_build_dir),
-                "-G", "Ninja Multi-Config",
-                f"-DCMAKE_C_COMPILER={c_compiler}",
-                f"-DCMAKE_CXX_COMPILER={cxx_compiler}",
-                f"-DCMAKE_C_FLAGS={c_flags[name]}",
-                f"-DCMAKE_CXX_FLAGS={cxx_flags[name]}",
-                "-DCKS_BUILD_TESTS=ON",
-                # 静态链接使得 QEMU 运行不需要额外的库搜索路径
-                "-DCMAKE_EXE_LINKER_FLAGS=-static"
-            ]
-            if os.environ.get("GITHUB_ACTIONS") != "true":
-                config_args.append(f"-DCMAKE_CROSSCOMPILING_EMULATOR={qemu_bin}")
+                config_args = [
+                    "cmake", "-S", str(project_root), "-B", str(current_build_dir),
+                    "-G", "Ninja Multi-Config",
+                    f"-DCMAKE_C_COMPILER={c_compiler}",
+                    f"-DCMAKE_CXX_COMPILER={cxx_compiler}",
+                    f"-DCMAKE_C_FLAGS={c_flags[name]}",
+                    f"-DCMAKE_CXX_FLAGS={cxx_flags[name]}",
+                    "-DCKS_BUILD_TESTS=ON",
+                    f"-DCKS_BUILD_DLL={dll_opt}",
+                    # 静态链接使得 QEMU 运行不需要额外的库搜索路径
+                    "-DCMAKE_EXE_LINKER_FLAGS=-static"
+                ]
+                if os.environ.get("GITHUB_ACTIONS") != "true":
+                    config_args.append(f"-DCMAKE_CROSSCOMPILING_EMULATOR={qemu_bin}")
 
-            run_command(config_args)
+                run_command(config_args)
 
-            # 2. 编译
-            run_command(["cmake", "--build", str(current_build_dir), "--config", build_cfg])
+                # 2. 编译
+                run_command(["cmake", "--build", str(current_build_dir), "--config", build_cfg])
 
-            # 3. 测试
-            sve_test_env = {"QEMU_CPU": f"max,sve-max-vq=1"}
-            run_command([
-                "ctest", "--output-on-failure", "--test-dir", str(current_build_dir), "-C", build_cfg
-            ], env=sve_test_env)
+                # 3. 测试
+                test_env = {"QEMU_CPU": f"max,sve-max-vq=1"}
+                run_command([
+                    "ctest", "--output-on-failure", "--test-dir", str(current_build_dir), "-C", build_cfg
+                ], env=test_env)
 
     print("\n[SUCCESS] All ARM tests passed.")
 

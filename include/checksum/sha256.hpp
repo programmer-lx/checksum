@@ -77,8 +77,8 @@ namespace cks
     }
 
     // 更新哈希状态（处理数据块）
-    void CKS_CALL_CONV sha256_update(SHA256_Context* ctx, const void* data, size_t len) noexcept;
+    CKS_API void CKS_CALL_CONV sha256_update(SHA256_Context* ctx, const void* data, size_t len) noexcept;
 
     // 最终化处理，返回32字节哈希值
-    SHA256 CKS_CALL_CONV sha256_end(SHA256_Context* ctx) noexcept;
+    CKS_API SHA256 CKS_CALL_CONV sha256_end(SHA256_Context* ctx) noexcept;
 }

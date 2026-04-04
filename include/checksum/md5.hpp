@@ -2,6 +2,7 @@
 
 #include <cstdint>
 #include <cstddef>
+#include <cstring>
 
 #include "checksum/detail/base.hpp"
 
@@ -23,17 +24,12 @@ namespace cks
 
         bool operator==(const MD5& other) const noexcept
         {
-            for (int i = 0; i < 16; ++i)
-            {
-                if (bytes[i] != other.bytes[i])
-                    return false;
-            }
-            return true;
+            return std::memcmp(bytes, other.bytes, sizeof(bytes)) == 0;
         }
 
         bool operator!=(const MD5& other) const noexcept
         {
-            return !(*this == other);
+            return std::memcmp(bytes, other.bytes, sizeof(bytes)) != 0;
         }
     };
 
@@ -52,8 +48,8 @@ namespace cks
     }
 
     // 更新哈希状态
-    void CKS_CALL_CONV md5_update(MD5_Context* ctx, const void* data, size_t len) noexcept;
+    CKS_API void CKS_CALL_CONV md5_update(MD5_Context* ctx, const void* data, size_t len) noexcept;
 
     // 最终化处理，返回16字节哈希值
-    MD5 CKS_CALL_CONV md5_end(MD5_Context* ctx) noexcept;
+    CKS_API MD5 CKS_CALL_CONV md5_end(MD5_Context* ctx) noexcept;
 }
