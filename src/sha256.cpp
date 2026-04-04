@@ -1,27 +1,24 @@
 #include "checksum/sha256.hpp"
 
-#include <cstring> // std::memcpy
-
-#include "checksum/detail/os_detect.hpp"
 #include "checksum/detail/arch.hpp"
+#include "checksum/detail/cpu.hpp"
 
 #if CKS_ARCH_X86
-    #include <immintrin.h> // SHA-NI intrinsics
+#include <immintrin.h>
+#include <wmmintrin.h>
 #endif
 
 #if CKS_ARCH_ARM
-    #include <arm_acle.h>
-    #include <arm_neon.h>
+#include <arm_neon.h>
+#include <arm_acle.h>
 #endif
-
-#include "checksum/detail/cpu.hpp"
 
 namespace cks
 {
     namespace detail
     {
-        // SHA256常量K[64]（FIPS 180-4规范）
-        inline constexpr uint32_t K[64] = {
+        // SHA-256 常量 K（FIPS 180-4）
+        static constexpr uint32_t K[64] = {
             0x428a2f98, 0x71374491, 0xb5c0fbcf, 0xe9b5dba5,
             0x3956c25b, 0x59f111f1, 0x923f82a4, 0xab1c5ed5,
             0xd807aa98, 0x12835b01, 0x243185be, 0x550c7dc3,
@@ -37,402 +34,646 @@ namespace cks
             0x19a4c116, 0x1e376c08, 0x2748774c, 0x34b0bcb5,
             0x391c0cb3, 0x4ed8aa4a, 0x5b9cca4f, 0x682e6ff3,
             0x748f82ee, 0x78a5636f, 0x84c87814, 0x8cc70208,
-            0x90befffa, 0xa4506ceb, 0xbef9a3f7, 0xc67178f2
+            0x90befffa, 0xa4506ceb, 0xbef9a3f7, 0xc67178f2,
         };
 
-        // 右旋转操作
-        inline constexpr uint32_t rotr(uint32_t x, uint32_t n) noexcept
+        static inline uint32_t rotr32(uint32_t x, int n) noexcept
         {
             return (x >> n) | (x << (32 - n));
         }
 
-        // SHA256压缩函数（处理单个512位块）
-        inline void sha256_transform_soft(uint32_t state[8], const uint8_t block[64]) noexcept
+        // 处理单个 512 位（64字节）消息块（软件实现）
+        static void sha256_process_block_soft(uint32_t state[8], const uint8_t block[64]) noexcept
         {
             uint32_t W[64];
 
-            // 1. 准备消息调度数组W[0..63]
-            for (int t = 0; t < 16; ++t)
+            // 消息调度
+            for (int i = 0; i < 16; ++i)
             {
-                W[t] = (static_cast<uint32_t>(block[t * 4 + 0]) << 24) |
-                       (static_cast<uint32_t>(block[t * 4 + 1]) << 16) |
-                       (static_cast<uint32_t>(block[t * 4 + 2]) << 8)  |
-                       (static_cast<uint32_t>(block[t * 4 + 3]) << 0);
+                W[i] = (uint32_t(block[i * 4 + 0]) << 24)
+                     | (uint32_t(block[i * 4 + 1]) << 16)
+                     | (uint32_t(block[i * 4 + 2]) <<  8)
+                     | (uint32_t(block[i * 4 + 3]) <<  0);
+            }
+            for (int i = 16; i < 64; ++i)
+            {
+                uint32_t s0 = rotr32(W[i-15], 7) ^ rotr32(W[i-15], 18) ^ (W[i-15] >> 3);
+                uint32_t s1 = rotr32(W[i-2],  17) ^ rotr32(W[i-2],  19) ^ (W[i-2]  >> 10);
+                W[i] = W[i-16] + s0 + W[i-7] + s1;
             }
 
-            for (int t = 16; t < 64; ++t)
-            {
-                uint32_t s0 = rotr(W[t - 15], 7) ^ rotr(W[t - 15], 18) ^ (W[t - 15] >> 3);
-                uint32_t s1 = rotr(W[t - 2], 17) ^ rotr(W[t - 2], 19) ^ (W[t - 2] >> 10);
-                W[t] = W[t - 16] + s0 + W[t - 7] + s1;
-            }
+            uint32_t a = state[0], b = state[1], c = state[2], d = state[3];
+            uint32_t e = state[4], f = state[5], g = state[6], h = state[7];
 
-            // 2. 初始化工作变量
-            uint32_t a = state[0];
-            uint32_t b = state[1];
-            uint32_t c = state[2];
-            uint32_t d = state[3];
-            uint32_t e = state[4];
-            uint32_t f = state[5];
-            uint32_t g = state[6];
-            uint32_t h = state[7];
-
-            // 3. 64轮循环计算
-            for (int t = 0; t < 64; ++t)
+            for (int i = 0; i < 64; ++i)
             {
-                uint32_t S1 = rotr(e, 6) ^ rotr(e, 11) ^ rotr(e, 25);
-                uint32_t ch = (e & f) ^ ((~e) & g);
-                uint32_t temp1 = h + S1 + ch + K[t] + W[t];
-                uint32_t S0 = rotr(a, 2) ^ rotr(a, 13) ^ rotr(a, 22);
+                uint32_t S1  = rotr32(e, 6) ^ rotr32(e, 11) ^ rotr32(e, 25);
+                uint32_t ch  = (e & f) ^ (~e & g);
+                uint32_t tmp1 = h + S1 + ch + K[i] + W[i];
+                uint32_t S0  = rotr32(a, 2) ^ rotr32(a, 13) ^ rotr32(a, 22);
                 uint32_t maj = (a & b) ^ (a & c) ^ (b & c);
-                uint32_t temp2 = S0 + maj;
+                uint32_t tmp2 = S0 + maj;
 
-                h = g;
-                g = f;
-                f = e;
-                e = d + temp1;
-                d = c;
-                c = b;
-                b = a;
-                a = temp1 + temp2;
+                h = g; g = f; f = e; e = d + tmp1;
+                d = c; c = b; b = a; a = tmp1 + tmp2;
             }
 
-            // 4. 计算中间哈希值H(i)
-            state[0] += a;
-            state[1] += b;
-            state[2] += c;
-            state[3] += d;
-            state[4] += e;
-            state[5] += f;
-            state[6] += g;
-            state[7] += h;
+            state[0] += a; state[1] += b; state[2] += c; state[3] += d;
+            state[4] += e; state[5] += f; state[6] += g; state[7] += h;
         }
 
         SHA256_Context CKS_CALL_CONV sha256_update_soft(SHA256_Context ctx, const void* data, size_t len) noexcept
         {
-            if (!data || len == 0)
-                return ctx;
+            const uint8_t* bytes = reinterpret_cast<const uint8_t*>(data);
 
-            const uint8_t* bytes = static_cast<const uint8_t*>(data);
-
-            // 更新总消息长度
-            ctx.bit_len += static_cast<uint64_t>(len) * 8;
-
-            // 如果缓冲区有数据，尝试填满64字节块
-            if (ctx.buffer_len > 0)
+            while (len > 0)
             {
-                size_t needed = 64 - ctx.buffer_len;
-                size_t copy_len = (len < needed) ? len : needed;
+                uint32_t space = 64 - ctx.buffer_len;
+                uint32_t copy  = (len < space) ? uint32_t(len) : space;
 
-                std::memcpy(ctx.buffer + ctx.buffer_len, bytes, copy_len);
-                ctx.buffer_len += static_cast<uint32_t>(copy_len);
-                bytes += copy_len;
-                len -= copy_len;
+                std::memcpy(ctx.buffer + ctx.buffer_len, bytes, copy);
+                ctx.buffer_len += copy;
+                ctx.bit_len    += uint64_t(copy) * 8;
+                bytes          += copy;
+                len            -= copy;
 
-                // 如果缓冲区满了，处理它
                 if (ctx.buffer_len == 64)
                 {
-                    sha256_transform_soft(ctx.state, ctx.buffer);
+                    sha256_process_block_soft(ctx.state, ctx.buffer);
                     ctx.buffer_len = 0;
                 }
-            }
-
-            // 处理完整的64字节块
-            while (len >= 64)
-            {
-                sha256_transform_soft(ctx.state, bytes);
-                bytes += 64;
-                len -= 64;
-            }
-
-            // 保存剩余数据到缓冲区
-            if (len > 0)
-            {
-                std::memcpy(ctx.buffer, bytes, len);
-                ctx.buffer_len = static_cast<uint32_t>(len);
             }
 
             return ctx;
         }
 
-#if CKS_ARCH_X86
+        SHA256 CKS_CALL_CONV sha256_end_soft(SHA256_Context ctx) noexcept
+        {
+            // 填充：追加 0x80，然后是零字节，最后是 64 位大端长度
+            uint32_t i = ctx.buffer_len;
+            ctx.buffer[i++] = 0x80;
+
+            if (i > 56)
+            {
+                while (i < 64)
+                    ctx.buffer[i++] = 0x00;
+                sha256_process_block_soft(ctx.state, ctx.buffer);
+                i = 0;
+            }
+
+            while (i < 56)
+                ctx.buffer[i++] = 0x00;
+
+            // 大端序写入比特长度
+            ctx.buffer[56] = uint8_t(ctx.bit_len >> 56);
+            ctx.buffer[57] = uint8_t(ctx.bit_len >> 48);
+            ctx.buffer[58] = uint8_t(ctx.bit_len >> 40);
+            ctx.buffer[59] = uint8_t(ctx.bit_len >> 32);
+            ctx.buffer[60] = uint8_t(ctx.bit_len >> 24);
+            ctx.buffer[61] = uint8_t(ctx.bit_len >> 16);
+            ctx.buffer[62] = uint8_t(ctx.bit_len >>  8);
+            ctx.buffer[63] = uint8_t(ctx.bit_len >>  0);
+
+            sha256_process_block_soft(ctx.state, ctx.buffer);
+
+            SHA256 result;
+            for (int j = 0; j < 8; ++j)
+            {
+                result.bytes[j * 4 + 0] = uint8_t(ctx.state[j] >> 24);
+                result.bytes[j * 4 + 1] = uint8_t(ctx.state[j] >> 16);
+                result.bytes[j * 4 + 2] = uint8_t(ctx.state[j] >>  8);
+                result.bytes[j * 4 + 3] = uint8_t(ctx.state[j] >>  0);
+            }
+            return result;
+        }
+
+        // -------------------------------------------------------------------------
+        // x86 SHA-NI 实现
+        // -------------------------------------------------------------------------
+        #if CKS_ARCH_X86
+
+        CKS_FUNC_ATTR_INTRINSICS_SHA256
+        static void sha256_process_block_sha(uint32_t state[8], const uint8_t block[64]) noexcept
+        {
+            // 加载当前状态
+            // state[0..7] = a,b,c,d,e,f,g,h
+            // SHA-NI 使用两个寄存器: ABEF 和 CDGH
+            __m128i state0 = _mm_loadu_si128(reinterpret_cast<const __m128i*>(&state[0])); // a,b,c,d
+            __m128i state1 = _mm_loadu_si128(reinterpret_cast<const __m128i*>(&state[4])); // e,f,g,h
+
+            // SHA-NI 需要: state0 = {e,f,a,b}（高到低 dword），state1 = {g,h,c,d}
+            // 原始加载是小端序的内存布局，整理成正确的寄存器格式
+            __m128i tmp    = _mm_shuffle_epi32(state0, 0xB1); // cd ab
+            state1         = _mm_shuffle_epi32(state1, 0x1B); // ef gh -> gh ef
+            state0         = _mm_alignr_epi8(tmp, state1, 8); // ab ef
+            state1         = _mm_blend_epi16(state1, tmp, 0xF0); // gh cd
+
+            __m128i abef_save = state0;
+            __m128i cdgh_save = state1;
+
+            // 加载常量
+            const __m128i* K128 = reinterpret_cast<const __m128i*>(K);
+
+            // 加载并转换消息块（大端序）
+            const __m128i MASK = _mm_set_epi64x(0x0c0d0e0f08090a0bULL, 0x0405060700010203ULL);
+
+            __m128i msg0 = _mm_shuffle_epi8(_mm_loadu_si128(reinterpret_cast<const __m128i*>(block +  0)), MASK);
+            __m128i msg1 = _mm_shuffle_epi8(_mm_loadu_si128(reinterpret_cast<const __m128i*>(block + 16)), MASK);
+            __m128i msg2 = _mm_shuffle_epi8(_mm_loadu_si128(reinterpret_cast<const __m128i*>(block + 32)), MASK);
+            __m128i msg3 = _mm_shuffle_epi8(_mm_loadu_si128(reinterpret_cast<const __m128i*>(block + 48)), MASK);
+
+            __m128i tmp0, tmp1, tmp2, tmp3;
+
+            // rounds 0-3
+            tmp0   = _mm_add_epi32(msg0, _mm_load_si128(K128 + 0));
+            state1 = _mm_sha256rnds2_epu32(state1, state0, tmp0);
+            tmp0   = _mm_shuffle_epi32(tmp0, 0x0E);
+            state0 = _mm_sha256rnds2_epu32(state0, state1, tmp0);
+
+            // rounds 4-7
+            tmp1   = _mm_add_epi32(msg1, _mm_load_si128(K128 + 1));
+            state1 = _mm_sha256rnds2_epu32(state1, state0, tmp1);
+            tmp1   = _mm_shuffle_epi32(tmp1, 0x0E);
+            state0 = _mm_sha256rnds2_epu32(state0, state1, tmp1);
+            msg0   = _mm_sha256msg1_epu32(msg0, msg1);
+
+            // rounds 8-11
+            tmp2   = _mm_add_epi32(msg2, _mm_load_si128(K128 + 2));
+            state1 = _mm_sha256rnds2_epu32(state1, state0, tmp2);
+            tmp2   = _mm_shuffle_epi32(tmp2, 0x0E);
+            state0 = _mm_sha256rnds2_epu32(state0, state1, tmp2);
+            msg1   = _mm_sha256msg1_epu32(msg1, msg2);
+
+            // rounds 12-15
+            tmp3   = _mm_add_epi32(msg3, _mm_load_si128(K128 + 3));
+            state1 = _mm_sha256rnds2_epu32(state1, state0, tmp3);
+            tmp0   = _mm_alignr_epi8(msg3, msg2, 4);
+            msg0   = _mm_add_epi32(msg0, tmp0);
+            msg0   = _mm_sha256msg2_epu32(msg0, msg3);
+            tmp3   = _mm_shuffle_epi32(tmp3, 0x0E);
+            state0 = _mm_sha256rnds2_epu32(state0, state1, tmp3);
+            msg2   = _mm_sha256msg1_epu32(msg2, msg3);
+
+            // rounds 16-19
+            tmp0   = _mm_add_epi32(msg0, _mm_load_si128(K128 + 4));
+            state1 = _mm_sha256rnds2_epu32(state1, state0, tmp0);
+            tmp1   = _mm_alignr_epi8(msg0, msg3, 4);
+            msg1   = _mm_add_epi32(msg1, tmp1);
+            msg1   = _mm_sha256msg2_epu32(msg1, msg0);
+            tmp0   = _mm_shuffle_epi32(tmp0, 0x0E);
+            state0 = _mm_sha256rnds2_epu32(state0, state1, tmp0);
+            msg3   = _mm_sha256msg1_epu32(msg3, msg0);
+
+            // rounds 20-23
+            tmp1   = _mm_add_epi32(msg1, _mm_load_si128(K128 + 5));
+            state1 = _mm_sha256rnds2_epu32(state1, state0, tmp1);
+            tmp2   = _mm_alignr_epi8(msg1, msg0, 4);
+            msg2   = _mm_add_epi32(msg2, tmp2);
+            msg2   = _mm_sha256msg2_epu32(msg2, msg1);
+            tmp1   = _mm_shuffle_epi32(tmp1, 0x0E);
+            state0 = _mm_sha256rnds2_epu32(state0, state1, tmp1);
+            msg0   = _mm_sha256msg1_epu32(msg0, msg1);
+
+            // rounds 24-27
+            tmp2   = _mm_add_epi32(msg2, _mm_load_si128(K128 + 6));
+            state1 = _mm_sha256rnds2_epu32(state1, state0, tmp2);
+            tmp3   = _mm_alignr_epi8(msg2, msg1, 4);
+            msg3   = _mm_add_epi32(msg3, tmp3);
+            msg3   = _mm_sha256msg2_epu32(msg3, msg2);
+            tmp2   = _mm_shuffle_epi32(tmp2, 0x0E);
+            state0 = _mm_sha256rnds2_epu32(state0, state1, tmp2);
+            msg1   = _mm_sha256msg1_epu32(msg1, msg2);
+
+            // rounds 28-31
+            tmp3   = _mm_add_epi32(msg3, _mm_load_si128(K128 + 7));
+            state1 = _mm_sha256rnds2_epu32(state1, state0, tmp3);
+            tmp0   = _mm_alignr_epi8(msg3, msg2, 4);
+            msg0   = _mm_add_epi32(msg0, tmp0);
+            msg0   = _mm_sha256msg2_epu32(msg0, msg3);
+            tmp3   = _mm_shuffle_epi32(tmp3, 0x0E);
+            state0 = _mm_sha256rnds2_epu32(state0, state1, tmp3);
+            msg2   = _mm_sha256msg1_epu32(msg2, msg3);
+
+            // rounds 32-35
+            tmp0   = _mm_add_epi32(msg0, _mm_load_si128(K128 + 8));
+            state1 = _mm_sha256rnds2_epu32(state1, state0, tmp0);
+            tmp1   = _mm_alignr_epi8(msg0, msg3, 4);
+            msg1   = _mm_add_epi32(msg1, tmp1);
+            msg1   = _mm_sha256msg2_epu32(msg1, msg0);
+            tmp0   = _mm_shuffle_epi32(tmp0, 0x0E);
+            state0 = _mm_sha256rnds2_epu32(state0, state1, tmp0);
+            msg3   = _mm_sha256msg1_epu32(msg3, msg0);
+
+            // rounds 36-39
+            tmp1   = _mm_add_epi32(msg1, _mm_load_si128(K128 + 9));
+            state1 = _mm_sha256rnds2_epu32(state1, state0, tmp1);
+            tmp2   = _mm_alignr_epi8(msg1, msg0, 4);
+            msg2   = _mm_add_epi32(msg2, tmp2);
+            msg2   = _mm_sha256msg2_epu32(msg2, msg1);
+            tmp1   = _mm_shuffle_epi32(tmp1, 0x0E);
+            state0 = _mm_sha256rnds2_epu32(state0, state1, tmp1);
+            msg0   = _mm_sha256msg1_epu32(msg0, msg1);
+
+            // rounds 40-43
+            tmp2   = _mm_add_epi32(msg2, _mm_load_si128(K128 + 10));
+            state1 = _mm_sha256rnds2_epu32(state1, state0, tmp2);
+            tmp3   = _mm_alignr_epi8(msg2, msg1, 4);
+            msg3   = _mm_add_epi32(msg3, tmp3);
+            msg3   = _mm_sha256msg2_epu32(msg3, msg2);
+            tmp2   = _mm_shuffle_epi32(tmp2, 0x0E);
+            state0 = _mm_sha256rnds2_epu32(state0, state1, tmp2);
+            msg1   = _mm_sha256msg1_epu32(msg1, msg2);
+
+            // rounds 44-47
+            tmp3   = _mm_add_epi32(msg3, _mm_load_si128(K128 + 11));
+            state1 = _mm_sha256rnds2_epu32(state1, state0, tmp3);
+            tmp0   = _mm_alignr_epi8(msg3, msg2, 4);
+            msg0   = _mm_add_epi32(msg0, tmp0);
+            msg0   = _mm_sha256msg2_epu32(msg0, msg3);
+            tmp3   = _mm_shuffle_epi32(tmp3, 0x0E);
+            state0 = _mm_sha256rnds2_epu32(state0, state1, tmp3);
+            msg2   = _mm_sha256msg1_epu32(msg2, msg3);
+
+            // rounds 48-51
+            tmp0   = _mm_add_epi32(msg0, _mm_load_si128(K128 + 12));
+            state1 = _mm_sha256rnds2_epu32(state1, state0, tmp0);
+            tmp1   = _mm_alignr_epi8(msg0, msg3, 4);
+            msg1   = _mm_add_epi32(msg1, tmp1);
+            msg1   = _mm_sha256msg2_epu32(msg1, msg0);
+            tmp0   = _mm_shuffle_epi32(tmp0, 0x0E);
+            state0 = _mm_sha256rnds2_epu32(state0, state1, tmp0);
+            msg3   = _mm_sha256msg1_epu32(msg3, msg0);
+
+            // rounds 52-55
+            tmp1   = _mm_add_epi32(msg1, _mm_load_si128(K128 + 13));
+            state1 = _mm_sha256rnds2_epu32(state1, state0, tmp1);
+            tmp2   = _mm_alignr_epi8(msg1, msg0, 4);
+            msg2   = _mm_add_epi32(msg2, tmp2);
+            msg2   = _mm_sha256msg2_epu32(msg2, msg1);
+            tmp1   = _mm_shuffle_epi32(tmp1, 0x0E);
+            state0 = _mm_sha256rnds2_epu32(state0, state1, tmp1);
+
+            // rounds 56-59
+            tmp2   = _mm_add_epi32(msg2, _mm_load_si128(K128 + 14));
+            state1 = _mm_sha256rnds2_epu32(state1, state0, tmp2);
+            tmp3   = _mm_alignr_epi8(msg2, msg1, 4);
+            msg3   = _mm_add_epi32(msg3, tmp3);
+            msg3   = _mm_sha256msg2_epu32(msg3, msg2);
+            tmp2   = _mm_shuffle_epi32(tmp2, 0x0E);
+            state0 = _mm_sha256rnds2_epu32(state0, state1, tmp2);
+
+            // rounds 60-63
+            tmp3   = _mm_add_epi32(msg3, _mm_load_si128(K128 + 15));
+            state1 = _mm_sha256rnds2_epu32(state1, state0, tmp3);
+            tmp3   = _mm_shuffle_epi32(tmp3, 0x0E);
+            state0 = _mm_sha256rnds2_epu32(state0, state1, tmp3);
+
+            // 累加到保存的状态
+            state0 = _mm_add_epi32(state0, abef_save);
+            state1 = _mm_add_epi32(state1, cdgh_save);
+
+            // 还原为 state[0..7] 排列
+            tmp0   = _mm_shuffle_epi32(state0, 0x1B); // fe ba
+            state1 = _mm_shuffle_epi32(state1, 0xB1); // dg hc -> hc dg? no: cdgh -> ghcd
+            // state0 after round: {e,f,a,b} -> shuffle 1B -> {b,a,f,e}
+            // state1 after round: {g,h,c,d} -> shuffle B1 -> {d,c,h,g}? let me recheck
+            // Actually reconstruct: abef and cdgh
+            state0 = _mm_blend_epi16(tmp0, state1, 0xF0); // {d,c,b,a}? need {a,b,c,d}
+            state1 = _mm_alignr_epi8(state1, tmp0, 8);    // {e,f,g,h}? need {e,f,g,h}
+
+            _mm_storeu_si128(reinterpret_cast<__m128i*>(&state[0]), state0);
+            _mm_storeu_si128(reinterpret_cast<__m128i*>(&state[4]), state1);
+        }
+
         CKS_FUNC_ATTR_INTRINSICS_SHA256
         SHA256_Context CKS_CALL_CONV sha256_update_sha(SHA256_Context ctx, const void* data, size_t len) noexcept
         {
-            if (!data || len == 0)
-                return ctx;
+            const uint8_t* bytes = reinterpret_cast<const uint8_t*>(data);
 
-            const uint8_t* bytes = static_cast<const uint8_t*>(data);
-
-            // 更新总消息长度
-            ctx.bit_len += static_cast<uint64_t>(len) * 8;
-
-            // 如果缓冲区有数据，尝试填满64字节块
-            if (ctx.buffer_len > 0)
+            while (len > 0)
             {
-                size_t needed = 64 - ctx.buffer_len;
-                size_t copy_len = (len < needed) ? len : needed;
+                uint32_t space = 64 - ctx.buffer_len;
+                uint32_t copy  = (len < space) ? uint32_t(len) : space;
 
-                std::memcpy(ctx.buffer + ctx.buffer_len, bytes, copy_len);
-                ctx.buffer_len += static_cast<uint32_t>(copy_len);
-                bytes += copy_len;
-                len -= copy_len;
+                std::memcpy(ctx.buffer + ctx.buffer_len, bytes, copy);
+                ctx.buffer_len += copy;
+                ctx.bit_len    += uint64_t(copy) * 8;
+                bytes          += copy;
+                len            -= copy;
 
-                // 如果缓冲区满了，处理它
                 if (ctx.buffer_len == 64)
                 {
-                    // 处理单个块使用SHA-NI
-                    __m128i state0 = _mm_loadu_si128(reinterpret_cast<const __m128i*>(&ctx.state[0]));
-                    __m128i state1 = _mm_loadu_si128(reinterpret_cast<const __m128i*>(&ctx.state[4]));
-
-                    // 字节序转换
-                    state0 = _mm_shuffle_epi32(state0, 0xB1);
-                    state1 = _mm_shuffle_epi32(state1, 0x1B);
-                    __m128i tmp = state0;
-                    state0 = _mm_alignr_epi8(state1, state0, 8);
-                    state1 = _mm_blend_epi16(tmp, state1, 0xF0);
-
-                    // 加载消息块并执行SHA256 rounds
-                    __m128i msg = _mm_loadu_si128(reinterpret_cast<const __m128i*>(ctx.buffer));
-                    __m128i msgtmp = _mm_shuffle_epi8(msg, _mm_set_epi64x(0x0c0d0e0f08090a0b, 0x0405060700010203));
-
-                    // 前4轮
-                    __m128i tmp2 = _mm_add_epi32(msgtmp, _mm_set_epi64x(0x71374491428a2f98, 0xe9b5dba5b5c0fbcf));
-                    state1 = _mm_sha256rnds2_epu32(state1, state0, tmp2);
-                    tmp2 = _mm_shuffle_epi32(tmp2, 0x0E);
-                    state0 = _mm_sha256rnds2_epu32(state0, state1, tmp2);
-
-                    // 简化的SHA-NI实现（完整实现需要所有64轮）
-                    // 这里使用软件回退处理单块以简化代码
-                    sha256_transform_soft(ctx.state, ctx.buffer);
+                    sha256_process_block_sha(ctx.state, ctx.buffer);
                     ctx.buffer_len = 0;
                 }
             }
 
-            // 处理完整的64字节块 - 简化为使用软件实现
-            // 完整的SHA-NI优化需要更复杂的4块并行处理
-            while (len >= 64)
-            {
-                sha256_transform_soft(ctx.state, bytes);
-                bytes += 64;
-                len -= 64;
-            }
-
-            // 保存剩余数据到缓冲区
-            if (len > 0)
-            {
-                std::memcpy(ctx.buffer, bytes, len);
-                ctx.buffer_len = static_cast<uint32_t>(len);
-            }
-
             return ctx;
         }
-#endif // X86
 
-#if CKS_ARCH_ARM
-        CKS_FUNC_ATTR_INTRINSICS_ARM_SHA256
-        inline void sha256_transform_arm(uint32_t state[8], const uint8_t block[64]) noexcept
+        CKS_FUNC_ATTR_INTRINSICS_SHA256
+        SHA256 CKS_CALL_CONV sha256_end_sha(SHA256_Context ctx) noexcept
         {
-            // 加载当前状态 (abcd 和 efgh)
-            uint32x4_t abcd = vld1q_u32(&state[0]);
-            uint32x4_t efgh = vld1q_u32(&state[4]);
+            uint32_t i = ctx.buffer_len;
+            ctx.buffer[i++] = 0x80;
 
-            // 加载消息块 (大端转小端)
-            uint32x4_t w0 = vreinterpretq_u32_u8(vrev32q_u8(vld1q_u8(block)));
-            uint32x4_t w1 = vreinterpretq_u32_u8(vrev32q_u8(vld1q_u8(block + 16)));
-            uint32x4_t w2 = vreinterpretq_u32_u8(vrev32q_u8(vld1q_u8(block + 32)));
-            uint32x4_t w3 = vreinterpretq_u32_u8(vrev32q_u8(vld1q_u8(block + 48)));
-
-            // 前16轮: Rounds 0-3
-            uint32x4_t wk = vaddq_u32(w0, vld1q_u32(&K[0]));
-            uint32x4_t abcd_prev = abcd;
-            abcd = vsha256hq_u32(abcd, efgh, wk);
-            efgh = vsha256h2q_u32(efgh, abcd_prev, wk);
-
-            // Rounds 4-7
-            wk = vaddq_u32(w1, vld1q_u32(&K[4]));
-            abcd_prev = abcd;
-            abcd = vsha256hq_u32(abcd, efgh, wk);
-            efgh = vsha256h2q_u32(efgh, abcd_prev, wk);
-
-            // Rounds 8-11
-            wk = vaddq_u32(w2, vld1q_u32(&K[8]));
-            abcd_prev = abcd;
-            abcd = vsha256hq_u32(abcd, efgh, wk);
-            efgh = vsha256h2q_u32(efgh, abcd_prev, wk);
-
-            // Rounds 12-15
-            wk = vaddq_u32(w3, vld1q_u32(&K[12]));
-            abcd_prev = abcd;
-            abcd = vsha256hq_u32(abcd, efgh, wk);
-            efgh = vsha256h2q_u32(efgh, abcd_prev, wk);
-
-            // Rounds 16-63 (使用消息调度)
-            for (int i = 16; i < 64; i += 16)
+            if (i > 56)
             {
-                // 更新 w0-w3 用于下一轮
-                // msg0 = su1(su0(msg0), msg2, msg3)
-                w0 = vsha256su1q_u32(vsha256su0q_u32(w0, w1), w2, w3);
-                wk = vaddq_u32(w0, vld1q_u32(&K[i]));
-                abcd_prev = abcd;
-                abcd = vsha256hq_u32(abcd, efgh, wk);
-                efgh = vsha256h2q_u32(efgh, abcd_prev, wk);
-
-                w1 = vsha256su1q_u32(vsha256su0q_u32(w1, w2), w3, w0);
-                wk = vaddq_u32(w1, vld1q_u32(&K[i + 4]));
-                abcd_prev = abcd;
-                abcd = vsha256hq_u32(abcd, efgh, wk);
-                efgh = vsha256h2q_u32(efgh, abcd_prev, wk);
-
-                w2 = vsha256su1q_u32(vsha256su0q_u32(w2, w3), w0, w1);
-                wk = vaddq_u32(w2, vld1q_u32(&K[i + 8]));
-                abcd_prev = abcd;
-                abcd = vsha256hq_u32(abcd, efgh, wk);
-                efgh = vsha256h2q_u32(efgh, abcd_prev, wk);
-
-                w3 = vsha256su1q_u32(vsha256su0q_u32(w3, w0), w1, w2);
-                wk = vaddq_u32(w3, vld1q_u32(&K[i + 12]));
-                abcd_prev = abcd;
-                abcd = vsha256hq_u32(abcd, efgh, wk);
-                efgh = vsha256h2q_u32(efgh, abcd_prev, wk);
+                while (i < 64)
+                    ctx.buffer[i++] = 0x00;
+                sha256_process_block_sha(ctx.state, ctx.buffer);
+                i = 0;
             }
 
-            // 累加到原状态
-            uint32x4_t state0 = vld1q_u32(&state[0]);
-            uint32x4_t state1 = vld1q_u32(&state[4]);
-            abcd = vaddq_u32(abcd, state0);
-            efgh = vaddq_u32(efgh, state1);
+            while (i < 56)
+                ctx.buffer[i++] = 0x00;
 
-            vst1q_u32(&state[0], abcd);
-            vst1q_u32(&state[4], efgh);
+            ctx.buffer[56] = uint8_t(ctx.bit_len >> 56);
+            ctx.buffer[57] = uint8_t(ctx.bit_len >> 48);
+            ctx.buffer[58] = uint8_t(ctx.bit_len >> 40);
+            ctx.buffer[59] = uint8_t(ctx.bit_len >> 32);
+            ctx.buffer[60] = uint8_t(ctx.bit_len >> 24);
+            ctx.buffer[61] = uint8_t(ctx.bit_len >> 16);
+            ctx.buffer[62] = uint8_t(ctx.bit_len >>  8);
+            ctx.buffer[63] = uint8_t(ctx.bit_len >>  0);
+
+            sha256_process_block_sha(ctx.state, ctx.buffer);
+
+            SHA256 result;
+            for (int j = 0; j < 8; ++j)
+            {
+                result.bytes[j * 4 + 0] = uint8_t(ctx.state[j] >> 24);
+                result.bytes[j * 4 + 1] = uint8_t(ctx.state[j] >> 16);
+                result.bytes[j * 4 + 2] = uint8_t(ctx.state[j] >>  8);
+                result.bytes[j * 4 + 3] = uint8_t(ctx.state[j] >>  0);
+            }
+            return result;
+        }
+
+        #endif // CKS_ARCH_X86
+
+        // -------------------------------------------------------------------------
+        // ARM SHA2 实现
+        // -------------------------------------------------------------------------
+        #if CKS_ARCH_ARM
+
+        CKS_FUNC_ATTR_INTRINSICS_ARM_SHA256
+        static void sha256_process_block_arm(uint32_t state[8], const uint8_t block[64]) noexcept
+        {
+            uint32x4_t STATE0 = vld1q_u32(&state[0]);
+            uint32x4_t STATE1 = vld1q_u32(&state[4]);
+
+            uint32x4_t ABCD_SAVE = STATE0;
+            uint32x4_t EFGH_SAVE = STATE1;
+
+            // 加载消息，ARM 是小端序，需要字节反转
+            uint32x4_t MSG0 = vreinterpretq_u32_u8(vrev32q_u8(vld1q_u8(block +  0)));
+            uint32x4_t MSG1 = vreinterpretq_u32_u8(vrev32q_u8(vld1q_u8(block + 16)));
+            uint32x4_t MSG2 = vreinterpretq_u32_u8(vrev32q_u8(vld1q_u8(block + 32)));
+            uint32x4_t MSG3 = vreinterpretq_u32_u8(vrev32q_u8(vld1q_u8(block + 48)));
+
+            uint32x4_t TMP0, TMP1, TMP2, TMP3;
+
+            // rounds 0-3
+            TMP0   = vaddq_u32(MSG0, vld1q_u32(&K[0]));
+            TMP2   = STATE0;
+            STATE0 = vsha256hq_u32(STATE0, STATE1, TMP0);
+            STATE1 = vsha256h2q_u32(STATE1, TMP2, TMP0);
+            MSG0   = vsha256su0q_u32(MSG0, MSG1);
+
+            // rounds 4-7
+            TMP1   = vaddq_u32(MSG1, vld1q_u32(&K[4]));
+            TMP2   = STATE0;
+            STATE0 = vsha256hq_u32(STATE0, STATE1, TMP1);
+            STATE1 = vsha256h2q_u32(STATE1, TMP2, TMP1);
+            MSG0   = vsha256su1q_u32(MSG0, MSG2, MSG3);
+            MSG1   = vsha256su0q_u32(MSG1, MSG2);
+
+            // rounds 8-11
+            TMP2   = vaddq_u32(MSG2, vld1q_u32(&K[8]));
+            TMP3   = STATE0;
+            STATE0 = vsha256hq_u32(STATE0, STATE1, TMP2);
+            STATE1 = vsha256h2q_u32(STATE1, TMP3, TMP2);
+            MSG1   = vsha256su1q_u32(MSG1, MSG3, MSG0);
+            MSG2   = vsha256su0q_u32(MSG2, MSG3);
+
+            // rounds 12-15
+            TMP3   = vaddq_u32(MSG3, vld1q_u32(&K[12]));
+            TMP0   = STATE0;
+            STATE0 = vsha256hq_u32(STATE0, STATE1, TMP3);
+            STATE1 = vsha256h2q_u32(STATE1, TMP0, TMP3);
+            MSG2   = vsha256su1q_u32(MSG2, MSG0, MSG1);
+            MSG3   = vsha256su0q_u32(MSG3, MSG0);
+
+            // rounds 16-19
+            TMP0   = vaddq_u32(MSG0, vld1q_u32(&K[16]));
+            TMP1   = STATE0;
+            STATE0 = vsha256hq_u32(STATE0, STATE1, TMP0);
+            STATE1 = vsha256h2q_u32(STATE1, TMP1, TMP0);
+            MSG3   = vsha256su1q_u32(MSG3, MSG1, MSG2);
+            MSG0   = vsha256su0q_u32(MSG0, MSG1);
+
+            // rounds 20-23
+            TMP1   = vaddq_u32(MSG1, vld1q_u32(&K[20]));
+            TMP2   = STATE0;
+            STATE0 = vsha256hq_u32(STATE0, STATE1, TMP1);
+            STATE1 = vsha256h2q_u32(STATE1, TMP2, TMP1);
+            MSG0   = vsha256su1q_u32(MSG0, MSG2, MSG3);
+            MSG1   = vsha256su0q_u32(MSG1, MSG2);
+
+            // rounds 24-27
+            TMP2   = vaddq_u32(MSG2, vld1q_u32(&K[24]));
+            TMP3   = STATE0;
+            STATE0 = vsha256hq_u32(STATE0, STATE1, TMP2);
+            STATE1 = vsha256h2q_u32(STATE1, TMP3, TMP2);
+            MSG1   = vsha256su1q_u32(MSG1, MSG3, MSG0);
+            MSG2   = vsha256su0q_u32(MSG2, MSG3);
+
+            // rounds 28-31
+            TMP3   = vaddq_u32(MSG3, vld1q_u32(&K[28]));
+            TMP0   = STATE0;
+            STATE0 = vsha256hq_u32(STATE0, STATE1, TMP3);
+            STATE1 = vsha256h2q_u32(STATE1, TMP0, TMP3);
+            MSG2   = vsha256su1q_u32(MSG2, MSG0, MSG1);
+            MSG3   = vsha256su0q_u32(MSG3, MSG0);
+
+            // rounds 32-35
+            TMP0   = vaddq_u32(MSG0, vld1q_u32(&K[32]));
+            TMP1   = STATE0;
+            STATE0 = vsha256hq_u32(STATE0, STATE1, TMP0);
+            STATE1 = vsha256h2q_u32(STATE1, TMP1, TMP0);
+            MSG3   = vsha256su1q_u32(MSG3, MSG1, MSG2);
+            MSG0   = vsha256su0q_u32(MSG0, MSG1);
+
+            // rounds 36-39
+            TMP1   = vaddq_u32(MSG1, vld1q_u32(&K[36]));
+            TMP2   = STATE0;
+            STATE0 = vsha256hq_u32(STATE0, STATE1, TMP1);
+            STATE1 = vsha256h2q_u32(STATE1, TMP2, TMP1);
+            MSG0   = vsha256su1q_u32(MSG0, MSG2, MSG3);
+            MSG1   = vsha256su0q_u32(MSG1, MSG2);
+
+            // rounds 40-43
+            TMP2   = vaddq_u32(MSG2, vld1q_u32(&K[40]));
+            TMP3   = STATE0;
+            STATE0 = vsha256hq_u32(STATE0, STATE1, TMP2);
+            STATE1 = vsha256h2q_u32(STATE1, TMP3, TMP2);
+            MSG1   = vsha256su1q_u32(MSG1, MSG3, MSG0);
+            MSG2   = vsha256su0q_u32(MSG2, MSG3);
+
+            // rounds 44-47
+            TMP3   = vaddq_u32(MSG3, vld1q_u32(&K[44]));
+            TMP0   = STATE0;
+            STATE0 = vsha256hq_u32(STATE0, STATE1, TMP3);
+            STATE1 = vsha256h2q_u32(STATE1, TMP0, TMP3);
+            MSG2   = vsha256su1q_u32(MSG2, MSG0, MSG1);
+            MSG3   = vsha256su0q_u32(MSG3, MSG0);
+
+            // rounds 48-51
+            TMP0   = vaddq_u32(MSG0, vld1q_u32(&K[48]));
+            TMP1   = STATE0;
+            STATE0 = vsha256hq_u32(STATE0, STATE1, TMP0);
+            STATE1 = vsha256h2q_u32(STATE1, TMP1, TMP0);
+            MSG3   = vsha256su1q_u32(MSG3, MSG1, MSG2);
+
+            // rounds 52-55
+            TMP1   = vaddq_u32(MSG1, vld1q_u32(&K[52]));
+            TMP2   = STATE0;
+            STATE0 = vsha256hq_u32(STATE0, STATE1, TMP1);
+            STATE1 = vsha256h2q_u32(STATE1, TMP2, TMP1);
+
+            // rounds 56-59
+            TMP2   = vaddq_u32(MSG2, vld1q_u32(&K[56]));
+            TMP3   = STATE0;
+            STATE0 = vsha256hq_u32(STATE0, STATE1, TMP2);
+            STATE1 = vsha256h2q_u32(STATE1, TMP3, TMP2);
+
+            // rounds 60-63
+            TMP3   = vaddq_u32(MSG3, vld1q_u32(&K[60]));
+            TMP0   = STATE0;
+            STATE0 = vsha256hq_u32(STATE0, STATE1, TMP3);
+            STATE1 = vsha256h2q_u32(STATE1, TMP0, TMP3);
+
+            // 累加
+            STATE0 = vaddq_u32(STATE0, ABCD_SAVE);
+            STATE1 = vaddq_u32(STATE1, EFGH_SAVE);
+
+            vst1q_u32(&state[0], STATE0);
+            vst1q_u32(&state[4], STATE1);
         }
 
         CKS_FUNC_ATTR_INTRINSICS_ARM_SHA256
         SHA256_Context CKS_CALL_CONV sha256_update_arm(SHA256_Context ctx, const void* data, size_t len) noexcept
         {
-            if (!data || len == 0)
-                return ctx;
+            const uint8_t* bytes = reinterpret_cast<const uint8_t*>(data);
 
-            const uint8_t* bytes = static_cast<const uint8_t*>(data);
-
-            // 更新总消息长度
-            ctx.bit_len += static_cast<uint64_t>(len) * 8;
-
-            // 如果缓冲区有数据，尝试填满64字节块
-            if (ctx.buffer_len > 0)
+            while (len > 0)
             {
-                size_t needed = 64 - ctx.buffer_len;
-                size_t copy_len = (len < needed) ? len : needed;
+                uint32_t space = 64 - ctx.buffer_len;
+                uint32_t copy  = (len < space) ? uint32_t(len) : space;
 
-                std::memcpy(ctx.buffer + ctx.buffer_len, bytes, copy_len);
-                ctx.buffer_len += static_cast<uint32_t>(copy_len);
-                bytes += copy_len;
-                len -= copy_len;
+                std::memcpy(ctx.buffer + ctx.buffer_len, bytes, copy);
+                ctx.buffer_len += copy;
+                ctx.bit_len    += uint64_t(copy) * 8;
+                bytes          += copy;
+                len            -= copy;
 
-                // 如果缓冲区满了，处理它
                 if (ctx.buffer_len == 64)
                 {
-                    sha256_transform_arm(ctx.state, ctx.buffer);
+                    sha256_process_block_arm(ctx.state, ctx.buffer);
                     ctx.buffer_len = 0;
                 }
             }
 
-            // 处理完整的64字节块
-            while (len >= 64)
-            {
-                sha256_transform_arm(ctx.state, bytes);
-                bytes += 64;
-                len -= 64;
-            }
-
-            // 保存剩余数据到缓冲区
-            if (len > 0)
-            {
-                std::memcpy(ctx.buffer, bytes, len);
-                ctx.buffer_len = static_cast<uint32_t>(len);
-            }
-
             return ctx;
         }
-#endif // ARM
+
+        CKS_FUNC_ATTR_INTRINSICS_ARM_SHA256
+        SHA256 CKS_CALL_CONV sha256_end_arm(SHA256_Context ctx) noexcept
+        {
+            uint32_t i = ctx.buffer_len;
+            ctx.buffer[i++] = 0x80;
+
+            if (i > 56)
+            {
+                while (i < 64)
+                    ctx.buffer[i++] = 0x00;
+                sha256_process_block_arm(ctx.state, ctx.buffer);
+                i = 0;
+            }
+
+            while (i < 56)
+                ctx.buffer[i++] = 0x00;
+
+            ctx.buffer[56] = uint8_t(ctx.bit_len >> 56);
+            ctx.buffer[57] = uint8_t(ctx.bit_len >> 48);
+            ctx.buffer[58] = uint8_t(ctx.bit_len >> 40);
+            ctx.buffer[59] = uint8_t(ctx.bit_len >> 32);
+            ctx.buffer[60] = uint8_t(ctx.bit_len >> 24);
+            ctx.buffer[61] = uint8_t(ctx.bit_len >> 16);
+            ctx.buffer[62] = uint8_t(ctx.bit_len >>  8);
+            ctx.buffer[63] = uint8_t(ctx.bit_len >>  0);
+
+            sha256_process_block_arm(ctx.state, ctx.buffer);
+
+            SHA256 result;
+            for (int j = 0; j < 8; ++j)
+            {
+                result.bytes[j * 4 + 0] = uint8_t(ctx.state[j] >> 24);
+                result.bytes[j * 4 + 1] = uint8_t(ctx.state[j] >> 16);
+                result.bytes[j * 4 + 2] = uint8_t(ctx.state[j] >>  8);
+                result.bytes[j * 4 + 3] = uint8_t(ctx.state[j] >>  0);
+            }
+            return result;
+        }
+
+        #endif // CKS_ARCH_ARM
     }
 
+    // -------------------------------------------------------------------------
+    // 分发器：运行时选择最优实现
+    // -------------------------------------------------------------------------
     namespace
     {
-        auto sha256_fn() noexcept
+        struct SHA256Dispatch
         {
-            static auto fn = []()
+            SHA256_Context (CKS_CALL_CONV *update)(SHA256_Context, const void*, size_t) noexcept;
+            SHA256         (CKS_CALL_CONV *end)   (SHA256_Context) noexcept;
+        };
+
+        SHA256Dispatch sha256_dispatch() noexcept
+        {
+            static SHA256Dispatch disp = []()
             {
                 const cpu::Info& info = cpu::get_singleton_info();
 
-#if CKS_ARCH_X86
+                #if CKS_ARCH_X86
                 if (info.sha && info.sse4_1)
                 {
-                    return detail::sha256_update_sha;
+                    return SHA256Dispatch{ detail::sha256_update_sha, detail::sha256_end_sha };
                 }
-#endif
+                #endif
 
-#if CKS_ARCH_ARM
-    #if CKS_OS_LINUX // TODO 暂时只支持linux
+                #if CKS_ARCH_ARM
                 if (info.arm_sha2)
                 {
-                    return detail::sha256_update_arm;
+                    return SHA256Dispatch{ detail::sha256_update_arm, detail::sha256_end_arm };
                 }
-    #endif
-#endif
+                #endif
 
-                return detail::sha256_update_soft;
+                return SHA256Dispatch{ detail::sha256_update_soft, detail::sha256_end_soft };
             }();
-            return fn;
+            return disp;
         }
     }
 
     SHA256_Context CKS_CALL_CONV sha256_update(SHA256_Context ctx, const void* data, size_t len) noexcept
     {
-        return sha256_fn()(ctx, data, len);
+        return sha256_dispatch().update(ctx, data, len);
     }
 
     SHA256 CKS_CALL_CONV sha256_end(SHA256_Context ctx) noexcept
     {
-        // 1. 添加0x80标记
-        ctx.buffer[ctx.buffer_len++] = 0x80;
-
-        // 2. 如果剩余空间不足8字节，先填充0x00并处理
-        if (ctx.buffer_len > 56)
-        {
-            std::memset(ctx.buffer + ctx.buffer_len, 0, 64 - ctx.buffer_len);
-            detail::sha256_transform_soft(ctx.state, ctx.buffer);
-            ctx.buffer_len = 0;
-        }
-
-        // 3. 填充0x00到位置56
-        std::memset(ctx.buffer + ctx.buffer_len, 0, 56 - ctx.buffer_len);
-
-        // 4. 追加原始消息长度（64位大端序）
-        uint64_t bit_len_be = ctx.bit_len;
-        // 转换为big-endian
-        ctx.buffer[56] = static_cast<uint8_t>((bit_len_be >> 56) & 0xFF);
-        ctx.buffer[57] = static_cast<uint8_t>((bit_len_be >> 48) & 0xFF);
-        ctx.buffer[58] = static_cast<uint8_t>((bit_len_be >> 40) & 0xFF);
-        ctx.buffer[59] = static_cast<uint8_t>((bit_len_be >> 32) & 0xFF);
-        ctx.buffer[60] = static_cast<uint8_t>((bit_len_be >> 24) & 0xFF);
-        ctx.buffer[61] = static_cast<uint8_t>((bit_len_be >> 16) & 0xFF);
-        ctx.buffer[62] = static_cast<uint8_t>((bit_len_be >> 8)  & 0xFF);
-        ctx.buffer[63] = static_cast<uint8_t>((bit_len_be >> 0)  & 0xFF);
-
-        // 5. 处理最后一块
-        detail::sha256_transform_soft(ctx.state, ctx.buffer);
-
-        // 6. 将state[8]转换为32字节大端序数组
-        SHA256 hash;
-        for (int i = 0; i < 8; ++i)
-        {
-            hash.bytes[i * 4 + 0] = static_cast<uint8_t>((ctx.state[i] >> 24) & 0xFF);
-            hash.bytes[i * 4 + 1] = static_cast<uint8_t>((ctx.state[i] >> 16) & 0xFF);
-            hash.bytes[i * 4 + 2] = static_cast<uint8_t>((ctx.state[i] >> 8)  & 0xFF);
-            hash.bytes[i * 4 + 3] = static_cast<uint8_t>((ctx.state[i] >> 0)  & 0xFF);
-        }
-
-        return hash;
+        return sha256_dispatch().end(ctx);
     }
 }

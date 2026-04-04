@@ -2,6 +2,7 @@
 
 #include <cstdint>
 #include <cstddef>
+#include <cstring> // memcmp
 
 #include "checksum/detail/base.hpp"
 #include "checksum/detail/arch.hpp"
@@ -25,17 +26,12 @@ namespace cks
 
         bool operator==(const SHA256& other) const noexcept
         {
-            for (int i = 0; i < 32; ++i)
-            {
-                if (bytes[i] != other.bytes[i])
-                    return false;
-            }
-            return true;
+            return std::memcmp(bytes, other.bytes, sizeof(bytes)) == 0;
         }
 
         bool operator!=(const SHA256& other) const noexcept
         {
-            return !(*this == other);
+            return std::memcmp(bytes, other.bytes, sizeof(bytes)) != 0;
         }
     };
 
@@ -61,17 +57,24 @@ namespace cks
     {
         // 软件实现
         SHA256_Context CKS_CALL_CONV sha256_update_soft(SHA256_Context ctx, const void* data, size_t len) noexcept;
+        SHA256 CKS_CALL_CONV sha256_end_soft(SHA256_Context ctx) noexcept;
 
         // x86 SHA-NI硬件实现
         #if CKS_ARCH_X86
         CKS_FUNC_ATTR_INTRINSICS_SHA256
         SHA256_Context CKS_CALL_CONV sha256_update_sha(SHA256_Context ctx, const void* data, size_t len) noexcept;
+
+        CKS_FUNC_ATTR_INTRINSICS_SHA256
+        SHA256 CKS_CALL_CONV sha256_end_sha(SHA256_Context ctx) noexcept;
         #endif
 
         // ARM SHA2硬件实现
         #if CKS_ARCH_ARM
         CKS_FUNC_ATTR_INTRINSICS_ARM_SHA256
         SHA256_Context CKS_CALL_CONV sha256_update_arm(SHA256_Context ctx, const void* data, size_t len) noexcept;
+
+        CKS_FUNC_ATTR_INTRINSICS_ARM_SHA256
+        SHA256 CKS_CALL_CONV sha256_end_arm(SHA256_Context ctx) noexcept;
         #endif
     }
 
