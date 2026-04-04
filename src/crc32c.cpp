@@ -44,8 +44,8 @@ namespace cks
 
             for (size_t i = 0; i < size; i++)
             {
-                uint8_t index = (crc ^ bytes[i]) & 0xff;
-                crc = (crc >> 8) ^ crc32c_table[index];
+                uint8_t index = (crc.bytes ^ bytes[i]) & 0xff;
+                crc.bytes = (crc.bytes >> 8) ^ crc32c_table[index];
             }
 
             return crc;
@@ -64,7 +64,7 @@ namespace cks
             {
                 uint64_t v;
                 std::memcpy(&v, bytes + i, 8); // 避免未对齐 UB
-                crc = static_cast<uint32_t>(_mm_crc32_u64(crc, v));
+                crc.bytes = static_cast<uint32_t>(_mm_crc32_u64(crc.bytes, v));
             }
             #endif
 
@@ -72,12 +72,12 @@ namespace cks
             {
                 uint32_t v;
                 std::memcpy(&v, bytes + i, 4);
-                crc = _mm_crc32_u32(crc, v);
+                crc.bytes = _mm_crc32_u32(crc.bytes, v);
             }
 
             for (; i < size; ++i)
             {
-                crc = _mm_crc32_u8(crc, bytes[i]);
+                crc.bytes = _mm_crc32_u8(crc.bytes, bytes[i]);
             }
 
             return crc;
@@ -97,7 +97,7 @@ namespace cks
             {
                 uint64_t v;
                 std::memcpy(&v, bytes + i, 8); // 避免未对齐 UB
-                crc = __crc32cd(crc, v);
+                crc.bytes = __crc32cd(crc.bytes, v);
             }
             #endif
 
@@ -105,12 +105,12 @@ namespace cks
             {
                 uint32_t v;
                 std::memcpy(&v, bytes + i, 4);
-                crc = __crc32cw(crc, v);
+                crc.bytes = __crc32cw(crc.bytes, v);
             }
 
             for (; i < size; ++i)
             {
-                crc = __crc32cb(crc, bytes[i]);
+                crc.bytes = __crc32cb(crc.bytes, bytes[i]);
             }
 
             return crc;
@@ -120,7 +120,7 @@ namespace cks
 
     namespace
     {
-        auto crc32c_fn() noexcept
+        auto crc32c_update_fn() noexcept
         {
             static auto fn = []()
             {
@@ -149,6 +149,6 @@ namespace cks
 
     CRC32C CKS_CALL_CONV crc32c_update(CRC32C crc, const void* data, size_t size) noexcept
     {
-        return crc32c_fn()(crc, data, size);
+        return crc32c_update_fn()(crc, data, size);
     }
 }

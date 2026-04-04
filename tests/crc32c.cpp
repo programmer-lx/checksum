@@ -23,18 +23,18 @@ TEST(CRC32C, standard)
         size_t len = values[i].first.size();
         const void* data = values[i].first.c_str();
 
-        uint32_t soft_res = crc32c_end(detail::crc32c_update_soft(crc32c_begin(), data, len));
-        uint32_t expected = values[i].second;
+        CRC32C soft_res = crc32c_end(detail::crc32c_update_soft(crc32c_begin(), data, len));
+        CRC32C expected = {values[i].second};
 
         EXPECT_EQ(soft_res, expected);
 
         #if CKS_ARCH_X86
-        uint32_t sse_res = crc32c_end(detail::crc32c_update_sse42(crc32c_begin(), data, len));
+        CRC32C sse_res = crc32c_end(detail::crc32c_update_sse42(crc32c_begin(), data, len));
         EXPECT_EQ(sse_res, expected);
         #endif
 
         #if CKS_ARCH_ARM
-        uint32_t arm_res = crc32c_end(detail::crc32c_update_arm(crc32c_begin(), data, len));
+        CRC32C arm_res = crc32c_end(detail::crc32c_update_arm(crc32c_begin(), data, len));
         EXPECT_EQ(arm_res, expected);
         #endif
     }
@@ -46,17 +46,19 @@ TEST(CRC32C, standard)
 TEST(CRC32C, EmptyBuffer)
 {
     // Software Baseline
-    uint32_t soft_val = crc32c_begin();
+    CRC32C soft_val = crc32c_begin();
     soft_val = detail::crc32c_update_soft(soft_val, nullptr, 0);
-    uint32_t soft_final = crc32c_end(soft_val);
-    EXPECT_EQ(soft_final, 0x00000000);
+    CRC32C soft_final = crc32c_end(soft_val);
+
+    CRC32C expected = {0x00000000};
+    EXPECT_EQ(soft_final, expected);
 
 #if CKS_ARCH_X86
     // SSE4.2
     {
-        uint32_t crc = crc32c_begin();
+        CRC32C crc = crc32c_begin();
         crc = detail::crc32c_update_sse42(crc, nullptr, 0);
-        uint32_t result = crc32c_end(crc);
+        CRC32C result = crc32c_end(crc);
         EXPECT_EQ(result, soft_final);
     }
 #endif
@@ -64,9 +66,9 @@ TEST(CRC32C, EmptyBuffer)
 #if CKS_ARCH_ARM
     // ARM CRC32
     {
-        uint32_t crc = crc32c_begin();
+        CRC32C crc = crc32c_begin();
         crc = detail::crc32c_update_arm(crc, nullptr, 0);
-        uint32_t result = crc32c_end(crc);
+        CRC32C result = crc32c_end(crc);
         EXPECT_EQ(result, soft_final);
     }
 #endif
@@ -79,16 +81,16 @@ TEST(CRC32C, SmallBuffer)
     const size_t len = sizeof(data);
 
     // Software Baseline
-    uint32_t soft_val = crc32c_begin();
+    CRC32C soft_val = crc32c_begin();
     soft_val = detail::crc32c_update_soft(soft_val, data, len);
-    uint32_t soft_final = crc32c_end(soft_val);
+    CRC32C soft_final = crc32c_end(soft_val);
 
 #if CKS_ARCH_X86
     // SSE4.2
     {
-        uint32_t crc = crc32c_begin();
+        CRC32C crc = crc32c_begin();
         crc = detail::crc32c_update_sse42(crc, data, len);
-        uint32_t result = crc32c_end(crc);
+        CRC32C result = crc32c_end(crc);
         EXPECT_EQ(result, soft_final);
     }
 #endif
@@ -96,9 +98,9 @@ TEST(CRC32C, SmallBuffer)
 #if CKS_ARCH_ARM
     // ARM
     {
-        uint32_t crc = crc32c_begin();
+        CRC32C crc = crc32c_begin();
         crc = detail::crc32c_update_arm(crc, data, len);
-        uint32_t result = crc32c_end(crc);
+        CRC32C result = crc32c_end(crc);
         EXPECT_EQ(result, soft_final);
     }
 #endif
@@ -112,16 +114,16 @@ TEST(CRC32C, UnalignedMemory)
     const size_t len = sizeof(data);
 
     // Software Baseline
-    uint32_t soft_val = crc32c_begin();
+    CRC32C soft_val = crc32c_begin();
     soft_val = detail::crc32c_update_soft(soft_val, data, len);
-    uint32_t soft_final = crc32c_end(soft_val);
+    CRC32C soft_final = crc32c_end(soft_val);
 
 #if CKS_ARCH_X86
     // SSE4.2
     {
-        uint32_t crc = crc32c_begin();
+        CRC32C crc = crc32c_begin();
         crc = detail::crc32c_update_sse42(crc, data, len);
-        uint32_t result = crc32c_end(crc);
+        CRC32C result = crc32c_end(crc);
         EXPECT_EQ(result, soft_final);
     }
 #endif
@@ -129,9 +131,9 @@ TEST(CRC32C, UnalignedMemory)
 #if CKS_ARCH_ARM
     // ARM
     {
-        uint32_t crc = crc32c_begin();
+        CRC32C crc = crc32c_begin();
         crc = detail::crc32c_update_arm(crc, data, len);
-        uint32_t result = crc32c_end(crc);
+        CRC32C result = crc32c_end(crc);
         EXPECT_EQ(result, soft_final);
     }
 #endif
@@ -145,15 +147,15 @@ TEST(CRC32C, SegmentConsistency)
     const size_t mid = 8;
 
     // Software Baseline (一次性完成)
-    uint32_t soft_full = crc32c_end(detail::crc32c_update_soft(crc32c_begin(), data, len));
+    CRC32C soft_full = crc32c_end(detail::crc32c_update_soft(crc32c_begin(), data, len));
 
 #if CKS_ARCH_X86
     // SSE4.2 分两段计算
     {
-        uint32_t crc = crc32c_begin();
+        CRC32C crc = crc32c_begin();
         crc = detail::crc32c_update_sse42(crc, data, mid);
         crc = detail::crc32c_update_sse42(crc, data + mid, len - mid);
-        uint32_t result = crc32c_end(crc);
+        CRC32C result = crc32c_end(crc);
         EXPECT_EQ(result, soft_full);
     }
 #endif
@@ -161,10 +163,10 @@ TEST(CRC32C, SegmentConsistency)
 #if CKS_ARCH_ARM
     // ARM 分两段计算
     {
-        uint32_t crc = crc32c_begin();
+        CRC32C crc = crc32c_begin();
         crc = detail::crc32c_update_arm(crc, data, mid);
         crc = detail::crc32c_update_arm(crc, data + mid, len - mid);
-        uint32_t result = crc32c_end(crc);
+        CRC32C result = crc32c_end(crc);
         EXPECT_EQ(result, soft_full);
     }
 #endif
@@ -179,16 +181,16 @@ TEST(CRC32C, LargeBufferStress)
     }
 
     // Software Baseline
-    uint32_t soft_val = crc32c_begin();
+    CRC32C soft_val = crc32c_begin();
     soft_val = detail::crc32c_update_soft(soft_val, data.data(), data.size());
-    uint32_t soft_final = crc32c_end(soft_val);
+    CRC32C soft_final = crc32c_end(soft_val);
 
 #if CKS_ARCH_X86
     // SSE4.2
     {
-        uint32_t crc = crc32c_begin();
+        CRC32C crc = crc32c_begin();
         crc = detail::crc32c_update_sse42(crc, data.data(), data.size());
-        uint32_t result = crc32c_end(crc);
+        CRC32C result = crc32c_end(crc);
         EXPECT_EQ(result, soft_final);
     }
 #endif
@@ -196,9 +198,9 @@ TEST(CRC32C, LargeBufferStress)
 #if CKS_ARCH_ARM
     // ARM
     {
-        uint32_t crc = crc32c_begin();
+        CRC32C crc = crc32c_begin();
         crc = detail::crc32c_update_arm(crc, data.data(), data.size());
-        uint32_t result = crc32c_end(crc);
+        CRC32C result = crc32c_end(crc);
         EXPECT_EQ(result, soft_final);
     }
 #endif

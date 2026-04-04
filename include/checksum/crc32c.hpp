@@ -7,16 +7,29 @@
 
 namespace cks
 {
-    using CRC32C = uint32_t;
+    struct CRC32C
+    {
+        uint32_t bytes;
+
+        bool operator==(const CRC32C& other) const noexcept
+        {
+            return bytes == other.bytes;
+        }
+
+        bool operator!=(const CRC32C& other) const noexcept
+        {
+            return bytes != other.bytes;
+        }
+    };
 
     CKS_FORCE_INLINE CRC32C CKS_CALL_CONV crc32c_begin() noexcept
     {
-        return UINT32_C(0xffffffff);
+        return { UINT32_C(0xffffffff) };
     }
 
     CKS_FORCE_INLINE CRC32C CKS_CALL_CONV crc32c_end(CRC32C crc) noexcept
     {
-        return crc ^ UINT32_C(0xffffffff);
+        return { crc.bytes ^ UINT32_C(0xffffffff) };
     }
 
     namespace detail
