@@ -2,13 +2,7 @@
 set(XXHASH_DIR ${CMAKE_CURRENT_SOURCE_DIR}/xxHash)
 
 # xxHash source files (with x86 dispatch for runtime CPU detection)
-set(XXHASH_SOURCES ${XXHASH_DIR}/xxhash.c)
-
-# Add x86 dispatch on x86 platforms
-if(CMAKE_SYSTEM_PROCESSOR MATCHES "AMD64|x86_64|i[3-6]86|x86" OR 
-   CMAKE_HOST_SYSTEM_PROCESSOR MATCHES "AMD64|x86_64|i[3-6]86|x86")
-    list(APPEND XXHASH_SOURCES ${XXHASH_DIR}/xxh_x86dispatch.c)
-endif()
+set(XXHASH_SOURCES ${XXHASH_DIR}/xxhash.c ${XXHASH_DIR}/cks_xxhash.c)
 
 add_library(xxhash STATIC ${XXHASH_SOURCES})
 
