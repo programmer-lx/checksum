@@ -1,0 +1,85 @@
+name: CI
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  build-and-test:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            arch: x86
+          - os: ubuntu-latest
+            arch: arm
+          # - os: windows-latest
+          #   arch: x86
+
+    steps:
+      - name: Checkout Repo
+        uses: actions/checkout@v4
+        # with:
+        #   submodules: recursive
+
+
+      - name: Setup QEMU (linux arm)
+        if: matrix.arch == 'arm' && runner.os == 'Linux'
+        uses: docker/setup-qemu-action@v3
+        with:
+          platforms: ${{ matrix.arch == 'arm' && 'arm64' || 'x86_64' }}
+
+
+      - name: Setup SDE (linux x86)
+        if: matrix.arch == 'x86' && runner.os == 'Linux'
+        run: |
+          wget https://downloadmirror.intel.com/873619/sde-external-10.5.0-2026-01-13-lin.tar.xz
+          tar -xf sde-external-10.5.0-2026-01-13-lin.tar.xz
+          echo "$(pwd)/sde-external-10.5.0-2026-01-13-lin" >> $GITHUB_PATH
+
+
+      - name: Setup SDE (windows x86)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          curl.exe -L https://downloadmirror.intel.com/873619/sde-external-10.5.0-2026-01-13-win.tar.xz -o sde_win.tar.xz
+          tar -xf sde_win.tar.xz
+          
+          $SdeDir = (Get-Item "./sde-external-10.5.0-2026-01-13-win").FullName
+          
+          # 设置环境变量
+          echo "$SdeDir" >> $env:GITHUB_PATH
+          $env:PIN_ROOT = $SdeRoot
+          $env:PATH = "$SdeDir;$env:PATH"
+          echo "$SdeDir" >> $env:GITHUB_PATH
+
+
+      - name: Install Tools (linux)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y cmake clang-17 lld-17 ninja-build
+          if [ "${{ matrix.arch }}" = "arm" ]; then
+            sudo apt-get install -y g++-aarch64-linux-gnu
+          fi
+
+      
+      - name: Setup MSVC cmd (windows)
+        if: runner.os == 'Windows'
+        uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: x64
+
+
+      - name: Run x86 Tests (windows/linux)
+        if: matrix.arch == 'x86'
+        run: python scripts/test_x86.py --test_mode=max
+
+      - name: Run ARM Tests (linux)
+        if: matrix.arch == 'arm'
+        run: |
+          python scripts/test_arm.py --test_mode=max
