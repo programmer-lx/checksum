@@ -4,36 +4,42 @@
 #include <string>
 #include <utility>
 #include "checksum/md5.h"
+#include "utils.hpp"
 
-// 辅助函数：将MD5结果转换为hex字符串
-static std::string to_hex(const cks_MD5& hash)
-{
-    const char hex_chars[] = "0123456789abcdef";
-    std::string result;
-    result.reserve(32);
-    for (int i = 0; i < 16; ++i)
-    {
-        result += hex_chars[(hash.bytes[i] >> 4) & 0xF];
-        result += hex_chars[hash.bytes[i] & 0xF];
-    }
-    return result;
-}
 
 // 1. 已知值测试（RFC 1321标准向量）
+// https://www.rfc-editor.org/rfc/rfc1321
+/*
+MD5 test suite:
+MD5 ("") = d41d8cd98f00b204e9800998ecf8427e
+MD5 ("a") = 0cc175b9c0f1b6a831c399e269772661
+MD5 ("abc") = 900150983cd24fb0d6963f7d28e17f72
+MD5 ("message digest") = f96b697d7cb7938d525a2f31aaf161d0
+MD5 ("abcdefghijklmnopqrstuvwxyz") = c3fcd3d76192e4007dfb496cca67e13b
+MD5 ("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789") = d174ab98d277d9f5a5611c2c9f419d9f
+MD5 ("12345678901234567890123456789012345678901234567890123456789012345678901234567890") = 57edf4a22be3c955ac49da2e2107b67a
+*/
 TEST(MD5, Standard)
 {
     // 测试向量: {输入, 期望的hex结果}
     std::pair<std::string, std::string> test_vectors[] = {
         {"", "d41d8cd98f00b204e9800998ecf8427e"},
 
+        {"a", "0cc175b9c0f1b6a831c399e269772661"},
+
+        {"message digest", "f96b697d7cb7938d525a2f31aaf161d0"},
+
+        {"abcdefghijklmnopqrstuvwxyz", "c3fcd3d76192e4007dfb496cca67e13b"},
+
+        {"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789", "d174ab98d277d9f5a5611c2c9f419d9f"},
+
+        {"12345678901234567890123456789012345678901234567890123456789012345678901234567890", "57edf4a22be3c955ac49da2e2107b67a"},
+
         {"The quick brown fox jumps over the lazy dog", "9e107d9d372bb6826bd81d3542a419d6"},
 
         {"The quick brown fox jumps over the lazy cog", "1055d3e698d289f2af8663725127bd4b"},
 
-        {"abc", "900150983cd24fb0d6963f7d28e17f72"},
-
-        {"abcdoiuh aoiuehf ioashoiufhaosiue fhaioush fisdnoicaosinsidiksdish iufas hiufh aiuwshfiuahefiuaho ufho uhas ifs",
-            "86a6c3e60070e7d7990883af0934d5df"}
+        {"abc", "900150983cd24fb0d6963f7d28e17f72"}
     };
 
     for (const auto& vec : test_vectors)

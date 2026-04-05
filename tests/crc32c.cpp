@@ -4,16 +4,17 @@
 #include <string>
 #include <utility>
 #include "checksum/crc32c.h"
+#include "utils.hpp"
 
 // 已知值测试
 // https://www.lddgo.net/encrypt/crc 在线计算
 TEST(CRC32C, standard)
 {
-    std::pair<std::string, uint32_t> values[] = {
-        {"123456789", 0xE3069283},
-        {"6516861AVSDV", 0xD3936279},
-        {"aoscjnfsoidjc", 0xB92A3D05},
-        {"/*-+-*/*-*/-*qewreqw", 0x92187ED5}
+    std::pair<std::string, std::string> values[] = {
+        {"123456789", "e3069283"},
+        {"6516861AVSDV", "d3936279"},
+        {"aoscjnfsoidjc", "b92a3d05"},
+        {"/*-+-*/*-*/-*qewreqw", "92187ed5"}
     };
 
     for (size_t i = 0; i < std::size(values); ++i)
@@ -23,10 +24,8 @@ TEST(CRC32C, standard)
 
         // soft
         cks_CRC32C soft_res = cks_crc32c_end(cks_impl_crc32c_update_soft(cks_crc32c_begin(), data, len));
-        cks_CRC32C expected;
-        expected.bytes = values[i].second;
 
-        EXPECT_TRUE(cks_crc32c_equal(&soft_res, &expected));
+        EXPECT_EQ(to_hex(soft_res), values[i].second);
 
         // 通用接口
         {
@@ -34,19 +33,17 @@ TEST(CRC32C, standard)
             res = cks_crc32c_update(res, data, len);
             res = cks_crc32c_end(res);
             
-            cks_CRC32C expected2;
-            expected2.bytes = values[i].second;
-            EXPECT_TRUE(cks_crc32c_equal(&res, &expected2));
+            EXPECT_EQ(to_hex(res), values[i].second);
         }
 
         #if CKS_ARCH_X86
         cks_CRC32C sse_res = cks_crc32c_end(cks_impl_crc32c_update_sse42(cks_crc32c_begin(), data, len));
-        EXPECT_TRUE(cks_crc32c_equal(&sse_res, &expected));
+        EXPECT_EQ(to_hex(sse_res), values[i].second);
         #endif
 
         #if CKS_ARCH_ARM
         cks_CRC32C arm_res = cks_crc32c_end(cks_impl_crc32c_update_arm(cks_crc32c_begin(), data, len));
-        EXPECT_TRUE(cks_crc32c_equal(&arm_res, &expected));
+        EXPECT_EQ(to_hex(arm_res), values[i].second);
         #endif
     }
 }

@@ -4,20 +4,7 @@
 #include <string>
 #include <utility>
 #include "checksum/sha256.h"
-
-// 辅助函数：将SHA256结果转换为hex字符串
-static std::string to_hex(const cks_SHA256& hash)
-{
-    const char hex_chars[] = "0123456789abcdef";
-    std::string result;
-    result.reserve(64);
-    for (int i = 0; i < 32; ++i)
-    {
-        result += hex_chars[(hash.bytes[i] >> 4) & 0xF];
-        result += hex_chars[hash.bytes[i] & 0xF];
-    }
-    return result;
-}
+#include "utils.hpp"
 
 // 1. 已知值测试（NIST标准向量）
 // https://www.di-mgt.com.au/sha_testvectors.html

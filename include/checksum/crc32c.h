@@ -12,7 +12,7 @@ extern "C"
 
     typedef struct
     {
-        uint32_t bytes;
+        uint32_t bytes;     // 32bit 大端序存储
     } cks_CRC32C;
 
     /* begin */

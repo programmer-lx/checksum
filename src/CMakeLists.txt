@@ -9,6 +9,10 @@ else()
 endif()
 
 target_include_directories(checksum PUBLIC ${CKS_ROOT_DIR}/include)
+target_include_directories(checksum PRIVATE ${CKS_ROOT_DIR}/3rdparty/xxHash/xxHash)
+
+# link xxHash
+target_link_libraries(checksum PRIVATE xxhash)
 
 # C11
 target_compile_features(checksum PRIVATE c_std_11)

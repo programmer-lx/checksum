@@ -12,6 +12,7 @@ option(CKS_BUILD_TESTS "Build tests?" OFF)
 set(CKS_ROOT_DIR ${CMAKE_CURRENT_SOURCE_DIR})
 
 # sub-directories
+add_subdirectory(3rdparty)
 add_subdirectory(src)
 
 # test

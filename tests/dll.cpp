@@ -1,6 +1,8 @@
 #include "checksum/crc32c.h"
 #include "checksum/md5.h"
 #include "checksum/sha256.h"
+#include "checksum/xxhash3_128.h"
+#include "checksum/xxhash3_64.h"
 
 // 测试是否编译成了DLL
 // BUILD_DLL宏只在checksum库内部可见
@@ -58,11 +60,45 @@ void sha256()
     }
 }
 
+void xxhash3_128()
+{
+    cks_xxHash3_128_Context ctx = cks_xxhash3_128_begin();
+    cks_xxhash3_128_update(&ctx, nullptr, 0);
+    cks_xxHash3_128 value = cks_xxhash3_128_end(&ctx);
+
+    [[maybe_unused]] volatile void* ptr = &value;
+
+    {
+        cks_xxHash3_128 value2;
+        memset(&value2, 0, sizeof(value2));
+        int test = cks_xxhash3_128_equal(&value, &value2);
+        [[maybe_unused]] volatile void* ptr2 = &test;
+    }
+}
+
+void xxhash3_64()
+{
+    cks_xxHash3_64_Context ctx = cks_xxhash3_64_begin();
+    cks_xxhash3_64_update(&ctx, nullptr, 0);
+    cks_xxHash3_64 value = cks_xxhash3_64_end(&ctx);
+
+    [[maybe_unused]] volatile void* ptr = &value;
+
+    {
+        cks_xxHash3_64 value2;
+        memset(&value2, 0, sizeof(value2));
+        int test = cks_xxhash3_64_equal(&value, &value2);
+        [[maybe_unused]] volatile void* ptr2 = &test;
+    }
+}
+
 
 int main()
 {
     crc32c();
     md5();
     sha256();
+    xxhash3_128();
+    xxhash3_64();
     return 0;
 }
